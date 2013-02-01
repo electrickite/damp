@@ -2,6 +2,7 @@
 
 ### Script configuration variables ###
 
+progname="damp"
 DAMP_CONF_DIR="$HOME/.local/share/damp"
 
 
@@ -10,6 +11,12 @@ DAMP_CONF_DIR="$HOME/.local/share/damp"
 # Define basic help text
 usage () {
   echo "usage: $0 -a argument"
+}
+
+# Error handling
+function error_exit () {
+  echo "${progname}: ${1:-"unknown error"}" 1>&2
+  exit 1
 }
 
 generate_global_conf () {
