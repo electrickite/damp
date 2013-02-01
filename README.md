@@ -30,6 +30,7 @@ domain - the site domain
 path - the site document root  
 db/database - the database name  
 
+mail - install MTA during setup
 phpconf - php conf file path  
 httpdconf - the httpd configuration directory path  
 httpdport - the httpd port number  

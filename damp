@@ -44,6 +44,40 @@ parse_conf () {
   fi
 }
 
+detect_os () {
+  distributions="Red CentOS Ubuntu Debian"
+  os=""
+  for i in $distributions; do
+    cat /etc/*release | grep $i > /dev/null 2>&1
+    if [ $? == 0 ]; then
+      os=$i
+    fi
+  done
+  if [ -z $os ]; then
+    error_exit "unsupported operating system - install packages manually"
+  fi
+  if [ $os == "Red" ]; then
+    os="Red Hat"
+  fi
+}
+
+install_packages () {
+  case "$1" in
+    "Red Hat"|CentOS)
+      yum install httpd mysql mysql-server php-cli php-pear php-xml php-mysql php-mbstring php-pdo php-gd
+      if [ ! -z $mail ]; then
+        yum install postfix
+      fi
+      ;;
+    Ubuntu|Debian)
+      apt-get install apache2 mysql-server mysql-client php5 php5-cli php5-mysql php5-xmlrpc php-pear php5-gd
+      if [ ! -z $mail ]; then
+        apt-get install postfix
+      fi
+      ;;
+  esac
+}
+
 requires_site () {
   if [ -z $site ]
   then
@@ -96,7 +130,8 @@ status_services () {
 }
 
 setup_stack () {
-  echo "setup operation called"
+  detect_os
+  install_packages $os
 }
 
 set_global () {
@@ -104,7 +139,28 @@ set_global () {
 }
 
 edit_conf () {
-  echo "conf operation called"
+  if [ -z $1 ]
+  then
+    error_exit "no component specified"
+  else
+    case "$1" in
+      php)
+        vi $phpconf
+        break
+        ;;
+      httpd)
+        vi $httpdconf
+        break
+        ;;
+      db)
+        vi $dbconf
+        break
+        ;;
+      *)
+        error_exit "unrecognized component"
+        ;;
+    esac
+  fi
 }
 
 ### Script execution start ###
@@ -140,7 +196,7 @@ then
 fi
 
 # Execute getopt to parse arguments
-ARGS=$(getopt -o hn:d:p:b: -l help,name:,domain:,path:,db:,database:,phpconf:,httpdconf:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath: -n "$progname" -- "$@");
+ARGS=$(getopt -o hn:d:mp:b: -l help,name:,domain:,path:,db:,database:,mail,phpconf:,httpdconf:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath: -n "$progname" -- "$@");
 
 # Bad arguments
 if [ $? -ne 0 ];
@@ -186,6 +242,10 @@ while true; do
         damp_db="$1"
         shift;
       fi
+      ;;
+    -m|--mail)
+      shift;
+      mail="install"
       ;;
     --phpconf)
       shift;
@@ -263,6 +323,14 @@ case "$operation" in
   open)
     requires_site
     open_site
+    exit 0
+    ;;
+  setup)
+    setup_stack
+    exit 0
+    ;;
+  conf)
+    edit_conf $2
     exit 0
     ;;
   *)
