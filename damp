@@ -34,6 +34,62 @@ parse_conf () {
   done < "$1"
 }
 
+list_sites () {
+  echo "list operation called"
+}
+
+site_info () {
+  echo "site info operation called"
+}
+
+new_site () {
+  echo "new site operation called"
+}
+
+open_site () {
+  echo "open site operation called"
+}
+
+remove_site () {
+  echo "remove site operation called"
+}
+
+update_sites () {
+  echo "update sites operation called"
+}
+
+set_site () {
+  echo "set site operation called"
+}
+
+start_services () {
+  echo "start operation called"
+}
+
+stop_services () {
+  echo "stop operation called"
+}
+
+restart_services () {
+  echo "restart operation called"
+}
+
+status_services () {
+  echo "status operation called"
+}
+
+setup_stack () {
+  echo "setup operation called"
+}
+
+set_global () {
+  echo "global operation called"
+}
+
+edit_conf () {
+  echo "conf operation called"
+}
+
 ### Script execution start ###
 
 # Make sure we are running as root - disabled for development
@@ -76,7 +132,7 @@ fi
 # A little argument magic...
 eval set -- "$ARGS";
 
-# Process arguments
+# Process options
 while true; do
   case "$1" in
     -h|--help)
@@ -175,7 +231,13 @@ while true; do
   esac
 done
 
-echo $1 $2
+# Process arguments and perform the requested operation
+case "$1" in
+  list)
+    list_sites
+    exit 0
+    ;;
+esac
+
 echo "Success!"
 exit 0
-
