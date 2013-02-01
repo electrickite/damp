@@ -3,14 +3,14 @@
 ### Script configuration variables ###
 
 progname="damp"
-DAMP_CONF_DIR="$HOME/.local/share/damp"
+conf_dir="$HOME/.local/share/damp"
 
 
 ### Function definitions ###
 
 # Define basic help text
 usage () {
-  echo "usage: $0 -a argument"
+  echo "usage: $progname -a argument"
 }
 
 # Error handling
@@ -20,7 +20,7 @@ function error_exit () {
 }
 
 generate_global_conf () {
-  cat > "$DAMP_CONF_DIR/damp.conf" <<EOF
+  cat > "$conf_dir/damp.conf" <<EOF
 phpconf=/etc/php.ini
 httpdconf=/etc/httpd
 httpdport=8080
@@ -115,18 +115,18 @@ edit_conf () {
 #fi
 
 # Create configuration files if not present
-if [ ! -d "$DAMP_CONF_DIR" ]; then
-  mkdir -p "$DAMP_CONF_DIR"
+if [ ! -d "$conf_dir" ]; then
+  mkdir -p "$conf_dir"
 fi
-if [ ! -d "$DAMP_CONF_DIR/sites" ]; then
-  mkdir -p "$DAMP_CONF_DIR/sites"
+if [ ! -d "$conf_dir/sites" ]; then
+  mkdir -p "$conf_dir/sites"
 fi
-if [ ! -f "$DAMP_CONF_DIR/damp.conf" ]; then
+if [ ! -f "$conf_dir/damp.conf" ]; then
   generate_global_conf
 fi
 
 # Parse global configuration file
-parse_conf "$DAMP_CONF_DIR/damp.conf"
+parse_conf "$conf_dir/damp.conf"
 
 # Check if we have any arguments at all
 if [ -z $1 ]
@@ -136,7 +136,7 @@ then
 fi
 
 # Execute getopt to parse arguments
-ARGS=$(getopt -o hn:d:p:b: -l help,name:,domain:,path:,db:,database:,phpconf:,httpdconf:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath: -n "damp" -- "$@");
+ARGS=$(getopt -o hn:d:p:b: -l help,name:,domain:,path:,db:,database:,phpconf:,httpdconf:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath: -n "$progname" -- "$@");
 
 # Bad arguments
 if [ $? -ne 0 ];
