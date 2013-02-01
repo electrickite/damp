@@ -34,6 +34,14 @@ parse_conf () {
   done < "$1"
 }
 
+requires_site () {
+  if [ -z $site ]
+  then
+    echo "damp: the requested operation requires a site"
+    exit 1
+  fi
+}
+
 list_sites () {
   echo "list operation called"
 }
@@ -231,10 +239,19 @@ while true; do
   esac
 done
 
+# Store operation and site parameters in global variables
+operation="$1"
+site="$2" 
+
 # Process arguments and perform the requested operation
-case "$1" in
+case "$operation" in
   list)
     list_sites
+    exit 0
+    ;;
+  open)
+    requires_site
+    open_site
     exit 0
     ;;
 esac
