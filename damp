@@ -37,7 +37,7 @@ parse_conf () {
     # ignore comment lines
     echo "$propline" | grep "^#" >/dev/null 2>&1 && continue
     # if not empty, set the property using declare
-    [ ! -z "$propline" ] && eval damp_$propline
+    [ ! -z "$propline" ] && eval $propline
   done < "$1"
   if [ $? -ne 0 ]; then
     error_exit "could not parse configuration file"
@@ -54,7 +54,7 @@ detect_os () {
     fi
   done
   if [ -z $os ]; then
-    error_exit "unsupported operating system - install packages manually"
+    error_exit "unsupported operating system - perform operation manually"
   fi
   if [ $os == "Red" ]; then
     os="Red Hat"
@@ -113,20 +113,23 @@ set_site () {
   echo "set site operation called"
 }
 
-start_services () {
-  echo "start operation called"
-}
+damp_services () {
+  detect_os
+  case "$os" in
+    "Red Hat"|CentOS)
+      service mysqld $1
+      service httpd $1
+      ;;
+    Ubuntu)
+      service mysql $1
+      service apache2 $1
+      ;;
+    Debian)
+      $initpath/mysql $1
+      $initpath/apache2 $1
+      ;;
+  esac
 
-stop_services () {
-  echo "stop operation called"
-}
-
-restart_services () {
-  echo "restart operation called"
-}
-
-status_services () {
-  echo "status operation called"
 }
 
 setup_stack () {
@@ -218,28 +221,28 @@ while true; do
     -n|--name)
       shift;
       if [ -n "$1" ]; then
-        damp_name="$1"
+        name="$1"
         shift;
       fi
       ;;
     -d|--domain)
       shift;
       if [ -n "$1" ]; then
-        damp_domain="$1"
+        domain="$1"
         shift;
       fi
       ;;
     -p|--path)
       shift;
       if [ -n "$1" ]; then
-        damp_path="$1"
+        path="$1"
         shift;
       fi
       ;;
     -b|--db|--database)
       shift;
       if [ -n "$1" ]; then
-        damp_db="$1"
+        db="$1"
         shift;
       fi
       ;;
@@ -250,56 +253,56 @@ while true; do
     --phpconf)
       shift;
       if [ -n "$1" ]; then
-        damp_phpconf="$1"
+        phpconf="$1"
         shift;
       fi
       ;;
     --httpdconf)
       shift;
       if [ -n "$1" ]; then
-        damp_httpdconf="$1"
+        httpdconf="$1"
         shift;
       fi
       ;;
     --httpdport)
       shift;
       if [ -n "$1" ]; then
-        damp_httpdport="$1"
+        httpdport="$1"
         shift;
       fi
       ;;
     --dbconf)
       shift;
       if [ -n "$1" ]; then
-        damp_dbconf="$1"
+        dbconf="$1"
         shift;
       fi
       ;;
     --dbport)
       shift;
       if [ -n "$1" ]; then
-        damp_dbport="$1"
+        dbport="$1"
         shift;
       fi
       ;;
     --dbuser)
       shift;
       if [ -n "$1" ]; then
-        damp_dbuser="$1"
+        dbuser="$1"
         shift;
       fi
       ;;
     --dbpass)
       shift;
       if [ -n "$1" ]; then
-        damp_dbpass="$1"
+        dbpass="$1"
         shift;
       fi
       ;;
     --initpath)
       shift;
       if [ -n "$1" ]; then
-        damp_initpath="$1"
+        initpath="$1"
         shift;
       fi
       ;;
@@ -323,6 +326,10 @@ case "$operation" in
   open)
     requires_site
     open_site
+    exit 0
+    ;;
+  start|stop|restart|status)
+    damp_services $operation
     exit 0
     ;;
   setup)
