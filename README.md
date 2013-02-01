@@ -30,8 +30,8 @@ Options
 
   phpconf - php conf file path
   httpdconf - the httpd configuration directory path
-  mysqlconf - the mysql configuration file path
   httpdport - the httpd port number
+  dbconf - the mysql configuration file path
   dbuser - the database root user
   dbpass - the database root user password
   dbport - the database port number

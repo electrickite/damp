@@ -1,0 +1,181 @@
+#!/bin/bash
+
+### Script configuration variables ###
+
+DAMP_CONF_DIR="$HOME/.local/share/damp"
+
+
+### Function definitions ###
+
+# Define basic help text
+usage () {
+  echo "usage: $0 -a argument"
+}
+
+generate_global_conf () {
+  cat > "$DAMP_CONF_DIR/damp.conf" <<EOF
+phpconf=/etc/php.ini
+httpdconf=/etc/httpd
+httpdport=8080
+dbconf=/etc/my.cnf
+dbuser=root
+dbpass=
+dbport=3306
+initpath=/etc/init.d
+EOF
+}
+
+parse_conf () {
+  while read propline ; do 
+    # ignore comment lines
+    echo "$propline" | grep "^#" >/dev/null 2>&1 && continue
+    # if not empty, set the property using declare
+    [ ! -z "$propline" ] && eval damp_$propline
+  done < "$1"
+}
+
+### Script execution start ###
+
+# Make sure we are running as root - disabled for development
+#if [ $(id -u) -ne 0 ]
+#then
+#  echo "damp: must be run as root." 1>&2
+#  exit 1
+#fi
+
+# Create configuration files if not present
+if [ ! -d "$DAMP_CONF_DIR" ]; then
+  mkdir -p "$DAMP_CONF_DIR"
+fi
+if [ ! -d "$DAMP_CONF_DIR/sites" ]; then
+  mkdir -p "$DAMP_CONF_DIR/sites"
+fi
+if [ ! -f "$DAMP_CONF_DIR/damp.conf" ]; then
+  generate_global_conf
+fi
+
+# Parse global configuration file
+parse_conf "$DAMP_CONF_DIR/damp.conf"
+
+# Check if we have any arguments at all
+if [ -z $1 ]
+then
+  usage
+  exit 1
+fi
+
+# Execute getopt to parse arguments
+ARGS=$(getopt -o hn:d:p:b: -l help,name:,domain:,path:,db:,database:,phpconf:,httpdconf:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath: -n "damp" -- "$@");
+
+# Bad arguments
+if [ $? -ne 0 ];
+then
+  exit 1
+fi
+
+# A little argument magic...
+eval set -- "$ARGS";
+
+# Process arguments
+while true; do
+  case "$1" in
+    -h|--help)
+      shift
+      usage
+      exit 0
+      ;;
+    -n|--name)
+      shift;
+      if [ -n "$1" ]; then
+        damp_name="$1"
+        shift;
+      fi
+      ;;
+    -d|--domain)
+      shift;
+      if [ -n "$1" ]; then
+        damp_domain="$1"
+        shift;
+      fi
+      ;;
+    -p|--path)
+      shift;
+      if [ -n "$1" ]; then
+        damp_path="$1"
+        shift;
+      fi
+      ;;
+    -b|--db|--database)
+      shift;
+      if [ -n "$1" ]; then
+        damp_db="$1"
+        shift;
+      fi
+      ;;
+    --phpconf)
+      shift;
+      if [ -n "$1" ]; then
+        damp_phpconf="$1"
+        shift;
+      fi
+      ;;
+    --httpdconf)
+      shift;
+      if [ -n "$1" ]; then
+        damp_httpdconf="$1"
+        shift;
+      fi
+      ;;
+    --httpdport)
+      shift;
+      if [ -n "$1" ]; then
+        damp_httpdport="$1"
+        shift;
+      fi
+      ;;
+    --dbconf)
+      shift;
+      if [ -n "$1" ]; then
+        damp_dbconf="$1"
+        shift;
+      fi
+      ;;
+    --dbport)
+      shift;
+      if [ -n "$1" ]; then
+        damp_dbport="$1"
+        shift;
+      fi
+      ;;
+    --dbuser)
+      shift;
+      if [ -n "$1" ]; then
+        damp_dbuser="$1"
+        shift;
+      fi
+      ;;
+    --dbpass)
+      shift;
+      if [ -n "$1" ]; then
+        damp_dbpass="$1"
+        shift;
+      fi
+      ;;
+    --initpath)
+      shift;
+      if [ -n "$1" ]; then
+        damp_initpath="$1"
+        shift;
+      fi
+      ;;
+    --)
+      shift
+      break
+      ;;
+  esac
+done
+
+echo $1 $2
+echo "Success!"
+exit 0
+
