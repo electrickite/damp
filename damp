@@ -265,6 +265,10 @@ case "$operation" in
     open_site
     exit 0
     ;;
+  *)
+    echo "${progname}: operation not recognized - try $0 --help" 1>&2
+    exit 1
+    ;;
 esac
 
 echo "Success!"
