@@ -115,21 +115,24 @@ set_site () {
 
 damp_services () {
   detect_os
+  service_error=0
   case "$os" in
     "Red Hat"|CentOS)
-      service mysqld $1
-      service httpd $1
+      service mysqld $1; [ $? -ne 0 ] && service_error=1
+      service httpd $1; [ $? -ne 0 ] && service_error=1
       ;;
     Ubuntu)
-      service mysql $1
-      service apache2 $1
+      service mysql $1; [ $? -ne 0 ] && service_error=1
+      service apache2 $1; [ $? -ne 0 ] && service_error=1
       ;;
     Debian)
-      $initpath/mysql $1
-      $initpath/apache2 $1
+      $initpath/mysql $1; [ $? -ne 0 ] && service_error=1
+      $initpath/apache2 $1; [ $? -ne 0 ] && service_error=1
       ;;
   esac
-
+  if [ $service_error -ne 0 ]; then
+    error_exit "errors occurred while performing the requested operations"
+  fi
 }
 
 setup_stack () {
