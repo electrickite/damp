@@ -4,8 +4,6 @@
 
 progname="damp"
 conf_dir="$HOME/.local/share/damp"
-global_options="phpconf httpdconf httpdport dbconf dbuser dbpass dbport initpath"
-site_options="name domain path db"
 
 
 ### Function definitions ###
@@ -24,7 +22,8 @@ function error_exit () {
 generate_global_conf () {
   cat > "$conf_dir/damp.conf" <<EOF
 phpconf=/etc/php.ini
-httpdconf=/etc/httpd
+httpdconf=/etc/apache2/apache.conf
+httpdvhost=/etc/apache2/sites-enabled
 httpdport=8080
 dbconf=/etc/my.cnf
 dbuser=root
@@ -87,12 +86,43 @@ requires_site () {
   fi
 }
 
-list_sites () {
-  echo "list operation called"
+load_site () {
+  if [ -f "$conf_dir/sites/${1}.conf" ]
+  then
+    parse_conf "$conf_dir/sites/${1}.conf"
+  else
+    error_exit "site does not exist"
+  fi
+}
+
+display_site () {
+  if [ ! -z $domain ]
+  then
+    fqdn="${name}.${domain}"
+  else
+    fqdn="$name"
+  fi
+  echo "Site information:"
+  echo "  Name:          $name"
+  echo "  Domain:        $fqdn"
+  echo "  Document root: $docroot"
+  echo "  Database:      $db"
+  echo "  DAMP config:   $conf_dir/sites/${name}.conf"
+  echo "  Apache config: $httpdvhost/${name}.conf"
+  echo ""
+  echo "  Link:          http://${fqdn}"
 }
 
 site_info () {
-  echo "site info operation called"
+  if [ -z $site ]
+  then
+    # List all sites
+    ls -1 "$conf_dir/sites" | sed "s/.conf//"
+  else
+    # Display information about a site
+    load_site $site
+    display_site
+  fi
 }
 
 new_site () {
@@ -111,8 +141,24 @@ update_sites () {
   echo "update sites operation called"
 }
 
-set_site () {
-  echo "set site operation called"
+set_opts () {
+  if [ -z $site ]
+  then
+    # Set global options
+    setopts="phpconf httpdconf httpdvhost httpdport dbconf dbuser dbpass dbport initpath"
+    optfile="$conf_dir/damp.conf"
+  else
+    # Set site specific options
+    load_site $site
+    setopts="name domain docroot db dbuser dbpass"
+    optfile="$conf_dir/sites/${site}.conf"
+  fi
+  for i in $setopts; do
+    sed -i "s|${i}=.*|${i}=${!i}|" "$optfile"
+    if [ $? -ne 0 ]; then
+      error_exit "error writing to the configuration file"
+    fi
+  done
 }
 
 damp_services () {
@@ -209,7 +255,7 @@ then
 fi
 
 # Execute getopt to parse arguments
-ARGS=$(getopt -o hn:d:mp:b: -l help,name:,domain:,path:,db:,database:,mail,phpconf:,httpdconf:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath: -n "$progname" -- "$@");
+ARGS=$(getopt -o hn:d:mp:b: -l help,name:,domain:,path:,docroot:,db:,database:,mail,phpconf:,httpdconf:,httpdvhost:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath: -n "$progname" -- "$@");
 
 # Bad arguments
 if [ $? -ne 0 ];
@@ -242,10 +288,10 @@ while true; do
         shift;
       fi
       ;;
-    -p|--path)
+    -p|--path|--docroot)
       shift;
       if [ -n "$1" ]; then
-        path="$1"
+        docroot="$1"
         shift;
       fi
       ;;
@@ -271,6 +317,13 @@ while true; do
       shift;
       if [ -n "$1" ]; then
         httpdconf="$1"
+        shift;
+      fi
+      ;;
+    --httpdvhost)
+      shift;
+      if [ -n "$1" ]; then
+        httpdvhost="$1"
         shift;
       fi
       ;;
@@ -329,13 +382,17 @@ site="$2"
 
 # Process arguments and perform the requested operation
 case "$operation" in
-  list)
-    list_sites
+  list|info)
+    site_info
     exit 0
     ;;
   open)
     requires_site
     open_site
+    exit 0
+    ;;
+  set)
+    set_opts
     exit 0
     ;;
   start|stop|restart|status)
@@ -344,10 +401,6 @@ case "$operation" in
     ;;
   setup)
     setup_stack
-    exit 0
-    ;;
-  global)
-    set_global
     exit 0
     ;;
   conf)

@@ -32,7 +32,8 @@ db/database - the database name
 
 mail - install MTA during setup
 phpconf - php conf file path  
-httpdconf - the httpd configuration directory path  
+httpdconf - the httpd configuration file path  
+httpdvhost - the vhost configuration file directory
 httpdport - the httpd port number  
 dbconf - the mysql configuration file path  
 dbuser - the database root user  
