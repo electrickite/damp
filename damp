@@ -4,6 +4,8 @@
 
 progname="damp"
 conf_dir="$HOME/.local/share/damp"
+global_options="phpconf httpdconf httpdport dbconf dbuser dbpass dbport initpath"
+site_options="name domain path db"
 
 
 ### Function definitions ###
@@ -141,7 +143,12 @@ setup_stack () {
 }
 
 set_global () {
-  echo "global operation called"
+  for i in $global_options; do
+    sed -i "s|${i}=.*|${i}=${!i}|" "$conf_dir/damp.conf"
+    if [ $? -ne 0 ]; then
+      error_exit "error writing to global configuration file."
+    fi
+  done
 }
 
 edit_conf () {
@@ -337,6 +344,10 @@ case "$operation" in
     ;;
   setup)
     setup_stack
+    exit 0
+    ;;
+  global)
+    set_global
     exit 0
     ;;
   conf)
