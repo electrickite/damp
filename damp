@@ -90,18 +90,18 @@ load_site () {
   if [ -f "$conf_dir/sites/${1}.conf" ]
   then
     parse_conf "$conf_dir/sites/${1}.conf"
+    if [ ! -z $domain ]
+    then
+      fqdn="${name}.${domain}"
+    else
+      fqdn="$name"
+    fi
   else
     error_exit "site does not exist"
   fi
 }
 
 display_site () {
-  if [ ! -z $domain ]
-  then
-    fqdn="${name}.${domain}"
-  else
-    fqdn="$name"
-  fi
   echo "Site information:"
   echo "  Name:          $name"
   echo "  Domain:        $fqdn"
@@ -130,7 +130,11 @@ new_site () {
 }
 
 open_site () {
-  echo "open site operation called"
+  load_site $site
+  url="http://${fqdn}"
+  [[ -x $BROWSER ]] && exec "$BROWSER" "$url"
+  browser_path=$(which xdg-open || which gnome-open || which kde-open) && exec "$browser_path" "$url"
+  error_exit "could not open browser"
 }
 
 remove_site () {
