@@ -50,7 +50,6 @@ initpath=/etc/init.d
 EOF
       ;;
   esac
-
 }
 
 parse_conf () {
@@ -110,17 +109,21 @@ site_exists () {
   [ -f "$conf_dir/sites/${1}.conf" ]
 }
 
+build_fqdn () {
+  if [ ! -z $domain ]
+    then
+      fqdn="${name}.${domain}"
+    else
+      fqdn="$name"
+  fi
+}
+
 load_site () {
   site_exists "$1"
   if [ $? == 0 ]
   then
     parse_conf "$conf_dir/sites/${1}.conf"
-    if [ ! -z $domain ]
-    then
-      fqdn="${name}.${domain}"
-    else
-      fqdn="$name"
-    fi
+    build_fqdn
   else
     error_exit "site does not exist"
   fi
@@ -138,6 +141,29 @@ display_site () {
   echo "  Link:          http://${fqdn}"
 }
 
+create_drupal_settings () {
+  cp "$docroot/sites/default/default.settings.php" "$docroot/sites/$fqdn/settings.php"
+  if [ $? -ne 0 ]; then
+    error_exit "could not write drupal site settings file."
+  fi
+  grep "db_url" "$docroot/sites/$fqdn/settings.php" > /dev/null 2>&1
+  if [ $? -ne 0 ]
+  then
+    echo "
+\$databases['default']['default'] = array(
+  'driver' => 'mysql',
+  'database' => '$database',
+  'username' => '$dbuser',
+  'password' => '$dbpass',
+  'host' => 'localhost',
+  'collation' => 'utf8_general_ci',
+);" >> "$docroot/sites/$fqdn/settings.php"
+  else
+    echo "
+\$db_url = 'mysql://${dbuser}:${dbpass}@localhost/${database}';" >> "$docroot/sites/$fqdn/settings.php"
+  fi
+}
+
 site_info () {
   if [ -z $site ]
   then
@@ -148,6 +174,14 @@ site_info () {
     load_site $site
     display_site
   fi
+}
+
+open_site () {
+  load_site $1
+  url="http://${fqdn}"
+  [[ -x $BROWSER ]] && exec "$BROWSER" "$url"
+  browser_path=$(which xdg-open || which gnome-open || which kde-open) && exec "$browser_path" "$url"
+  error_exit "could not open browser"
 }
 
 new_site () {
@@ -170,28 +204,32 @@ new_site () {
   site_exists $name
   if [ $? -ne 0 ]
   then
+    build_fqdn
+    if [ ! -f "$docroot/sites/default/default.settings.php" ]; then
+      error_exit "could not find default.settings.php"
+    fi
+    if [ -d "$docroot/sites/$fqdn" ]; then
+      error_exit "drupal site already exists with that fqdn"
+    fi
+    mkdir -p "$docroot/sites/$fqdn"
+    create_drupal_settings
+    chmod -R 777 "$docroot/sites/$fqdn"
     for i in $site_opts; do
       echo "${i}=${!i}" >> "$conf_dir/sites/${name}.conf"
       if [ $? -ne 0 ]; then
         error_exit "error writing to site configuration file"
       fi
     done
+    open_site $name
   else
     error_exit "site with that name already exists"
   fi
 }
 
-open_site () {
-  load_site $site
-  url="http://${fqdn}"
-  [[ -x $BROWSER ]] && exec "$BROWSER" "$url"
-  browser_path=$(which xdg-open || which gnome-open || which kde-open) && exec "$browser_path" "$url"
-  error_exit "could not open browser"
-}
-
 remove_site () {
   load_site $site
   rm -f "$conf_dir/sites/${site}.conf"
+  rm -Rf "$docroot/sites/$fqdn"
 }
 
 update_sites () {
@@ -447,7 +485,7 @@ case "$operation" in
     ;;
   open)
     requires_site
-    open_site
+    open_site $site
     exit 0
     ;;
   remove|delete|rm|del)
@@ -468,7 +506,7 @@ case "$operation" in
     exit 0
     ;;
   conf)
-    edit_conf $2
+    edit_conf $site
     exit 0
     ;;
   *)
