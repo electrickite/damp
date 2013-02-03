@@ -172,7 +172,8 @@ open_site () {
 }
 
 remove_site () {
-  echo "remove site operation called"
+  load_site $site
+  rm -f "$conf_dir/sites/${site}.conf"
 }
 
 update_sites () {
@@ -428,6 +429,11 @@ case "$operation" in
   open)
     requires_site
     open_site
+    exit 0
+    ;;
+  remove|delete|rm)
+    requires_site
+    remove_site
     exit 0
     ;;
   set)
