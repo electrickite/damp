@@ -4,6 +4,8 @@
 
 progname="damp"
 conf_dir="$HOME/.local/share/damp"
+global_opts="phpconf httpdconf httpdvhost httpdport dbconf rootdbuser rootdbpass dbport initpath"
+site_opts="name domain docroot database dbuser dbpass"
 
 
 ### Function definitions ###
@@ -26,8 +28,8 @@ httpdconf=/etc/apache2/apache.conf
 httpdvhost=/etc/apache2/sites-enabled
 httpdport=8080
 dbconf=/etc/my.cnf
-dbuser=root
-dbpass=
+rootdbuser=root
+rootdbpass=
 dbport=3306
 initpath=/etc/init.d
 EOF
@@ -111,7 +113,7 @@ display_site () {
   echo "  Name:          $name"
   echo "  Domain:        $fqdn"
   echo "  Document root: $docroot"
-  echo "  Database:      $db"
+  echo "  Database:      $database"
   echo "  DAMP config:   $conf_dir/sites/${name}.conf"
   echo "  Apache config: $httpdvhost/${name}.conf"
   echo ""
@@ -131,7 +133,34 @@ site_info () {
 }
 
 new_site () {
-  echo "new site operation called"
+  if [ -z $dbpass ]; then
+    dbpass=$(< /dev/urandom tr -dc A-Za-z0-9 | head -c8)
+  fi
+  for i in $site_opts; do
+    if [ -z ${!i} ]
+    then
+      echo -n "Enter site ${i}: "
+      read $i
+      if [ -z ${!i} ] && [ $i != "domain" ]; then
+        error_exit "$i is a required option"
+      fi
+    fi
+    if [ $i == "name" ] && [ -z $dbuser ]; then
+      dbuser="$name"
+    fi
+  done
+  site_exists $name
+  if [ $? -ne 0 ]
+  then
+    for i in $site_opts; do
+      echo "${i}=${!i}" >> "$conf_dir/sites/${name}.conf"
+      if [ $? -ne 0 ]; then
+        error_exit "error writing to site configuration file"
+      fi
+    done
+  else
+    error_exit "site with that name already exists"
+  fi
 }
 
 open_site () {
@@ -154,12 +183,18 @@ set_opts () {
   if [ -z $site ]
   then
     # Set global options
-    setopts="phpconf httpdconf httpdvhost httpdport dbconf dbuser dbpass dbport initpath"
+    setopts="$global_opts"
     optfile="$conf_dir/damp.conf"
+    if [ ! -z $dbuser ]; then
+      rootdbuser="$dbuser"
+    fi
+    if [ ! -z $dbpass ]; then
+      rootdbpass="$dbpass"
+    fi
   else
     # Set site specific options
     load_site $site
-    setopts="name domain docroot db dbuser dbpass"
+    setopts="$site_opts"
     optfile="$conf_dir/sites/${site}.conf"
   fi
   for i in $setopts; do
@@ -197,15 +232,6 @@ setup_stack () {
   install_packages $os
 }
 
-set_global () {
-  for i in $global_options; do
-    sed -i "s|${i}=.*|${i}=${!i}|" "$conf_dir/damp.conf"
-    if [ $? -ne 0 ]; then
-      error_exit "error writing to global configuration file."
-    fi
-  done
-}
-
 edit_conf () {
   if [ -z $1 ]
   then
@@ -216,11 +242,11 @@ edit_conf () {
         vi $phpconf
         break
         ;;
-      httpd)
+      httpd|apache)
         vi $httpdconf
         break
         ;;
-      db)
+      db|database|mysql)
         vi $dbconf
         break
         ;;
@@ -307,7 +333,7 @@ while true; do
     -b|--db|--database)
       shift;
       if [ -n "$1" ]; then
-        db="$1"
+        database="$1"
         shift;
       fi
       ;;
@@ -393,6 +419,10 @@ site="$2"
 case "$operation" in
   list|info)
     site_info
+    exit 0
+    ;;
+  new)
+    new_site
     exit 0
     ;;
   open)
