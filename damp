@@ -22,10 +22,12 @@ function error_exit () {
 }
 
 generate_global_conf () {
-  cat > "$conf_dir/damp.conf" <<EOF
+  case "$os" in
+    "Red Hat"|CentOS)
+      cat > "$conf_dir/damp.conf" <<EOF
 phpconf=/etc/php.ini
-httpdconf=/etc/apache2/apache.conf
-httpdvhost=/etc/apache2/sites-enabled
+httpdconf=/etc/httpd/conf/httpd.conf
+httpdvhost=/etc/httpd/conf.d
 httpdport=8080
 dbconf=/etc/my.cnf
 rootdbuser=root
@@ -33,6 +35,22 @@ rootdbpass=
 dbport=3306
 initpath=/etc/init.d
 EOF
+      ;;
+    *|Ubuntu|Debian)
+      cat > "$conf_dir/damp.conf" <<EOF
+phpconf=/etc/php5/apache2/php.ini
+httpdconf=/etc/apache2/apache2.conf
+httpdvhost=/etc/apache2/sites-enabled
+httpdport=8080
+dbconf=/etc/mysql/my.cnf
+rootdbuser=root
+rootdbpass=
+dbport=3306
+initpath=/etc/init.d
+EOF
+      ;;
+  esac
+
 }
 
 parse_conf () {
@@ -277,6 +295,7 @@ if [ $? -ne 0 ]; then
   error_exit "could not create configuration directories"
 fi
 if [ ! -f "$conf_dir/damp.conf" ]; then
+  detect_os
   generate_global_conf
 fi
 
@@ -431,7 +450,7 @@ case "$operation" in
     open_site
     exit 0
     ;;
-  remove|delete|rm)
+  remove|delete|rm|del)
     requires_site
     remove_site
     exit 0
@@ -444,7 +463,7 @@ case "$operation" in
     damp_services $operation
     exit 0
     ;;
-  setup)
+  setup|install)
     setup_stack
     exit 0
     ;;
@@ -458,5 +477,4 @@ case "$operation" in
     ;;
 esac
 
-echo "Success!"
 exit 0
