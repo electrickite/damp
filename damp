@@ -86,8 +86,13 @@ requires_site () {
   fi
 }
 
+site_exists () {
+  [ -f "$conf_dir/sites/${1}.conf" ]
+}
+
 load_site () {
-  if [ -f "$conf_dir/sites/${1}.conf" ]
+  site_exists "$1"
+  if [ $? == 0 ]
   then
     parse_conf "$conf_dir/sites/${1}.conf"
     if [ ! -z $domain ]
