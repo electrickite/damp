@@ -131,7 +131,7 @@ display_site () {
 }
 
 create_drupal_settings () {
-  as_user "cp \"$docroot/sites/default/default.settings.php\" \"$docroot/sites/$fqdn/settings.php\""
+  as_user "cp -f \"$docroot/sites/default/default.settings.php\" \"$docroot/sites/$fqdn/settings.php\""
   if [ $? -ne 0 ]; then
     error_exit "could not write drupal site settings file."
   fi
@@ -153,10 +153,13 @@ create_drupal_settings () {
   fi
 }
 
-create_vhost () {
+check_vhost () {
   if [ -f "$httpdvhost/${fqdn}.conf" ]; then
     error_exit "there is already and apache vhost with that fqdn"
   fi
+}
+
+create_vhost () {
   cat > "$httpdvhost/${fqdn}.conf" <<EOF
 NameVirtualHost *:${httpdport}
 Listen ${httpdport}
@@ -182,9 +185,17 @@ EOF
 }
 
 hosts_entry () {
-  echo "127.0.0.1 $fqdn" >> /etc/hosts
+  case "$1" in
+    add)
+      echo "127.0.0.1 $2" >> /etc/hosts
+      ;;
+    delete)
+      hosts_line="/127.0.0.1 ${2}/d"
+      sed -i "$hosts_line" /etc/hosts
+      ;;
+  esac
   if [ $? -ne 0 ]; then
-    error_exit "could not create hosts file entry"
+    error_exit "could not alter hosts file"
   fi
 }
 
@@ -193,17 +204,97 @@ manage_database () {
     create)
       mysql -u $rootdbuser --password=$rootdbpass --execute="CREATE DATABASE ${database};"
       mysql -u $rootdbuser --password=$rootdbpass --execute="GRANT ALL PRIVILEGES ON ${database}.* TO ${dbuser}@localhost IDENTIFIED BY '${dbpass}';"
-      mysql -u $rootdbuser --password=$rootdbpass --execute="flush privileges;"
       ;;
     delete)
       mysql -u $rootdbuser --password=$rootdbpass --execute="DROP USER ${dbuser}@localhost;"
       mysql -u $rootdbuser --password=$rootdbpass --execute="DROP DATABASE ${database};"
-      mysql -u $rootdbuser --password=$rootdbpass --execute="flush privileges;"
+      ;;
+    userdel)
+      mysql -u $rootdbuser --password=$rootdbpass --execute="DROP USER ${2}@localhost;"
+      ;;
+    useradd)
+      mysql -u $rootdbuser --password=$rootdbpass --execute="GRANT ALL PRIVILEGES ON ${database}.* TO ${2}@localhost IDENTIFIED BY '${3}';"
       ;;
   esac
+  mysql -u $rootdbuser --password=$rootdbpass --execute="flush privileges;"
   if [ $? -ne 0 ]; then
     error_exit "error performing database operation"
   fi
+}
+
+check_docroot () {
+  if [ ! -f "${docroot}/sites/default/default.settings.php" ]; then
+    error_exit "could not find default.settings.php"
+  fi
+}
+
+check_site_name () {
+  if [ -d "${docroot}/sites/${fqdn}" ]; then
+    error_exit "drupal site already exists with that fqdn"
+  fi
+}
+
+alter_site () {
+  # MySQL databases cannot be reliably renamed
+  if [ ! -z $database ]; then
+    error_exit "the database cannot be changed once a site has been created"
+  fi
+
+  # Copy user input to new variables
+  for i in $site_opts; do
+    if [ ! -z ${!i} ]; then
+      eval new_${i}="${!i}"
+    fi
+  done
+
+  # load existing site options
+  load_site $site
+
+  # Copy existing options to set of 'old' variables
+  for i in $site_opts; do
+    eval "old_${i}"="${!i}"
+  done
+  old_fqdn=$fqdn
+
+  # Replace current site variables with user input
+  for i in $site_opts; do
+    new_var_name="new_${i}"
+    if [ ! -z ${!new_var_name} ]; then
+      eval ${i}="${!new_var_name}"
+    fi
+  done
+  build_fqdn
+
+  # Alter site options - move files as necessary
+  check_docroot
+  if [ $name != $old_name ]; then
+    site_exists $name
+    if [ $? -eq 0 ]; then
+      error_exit "site with that name already exists"
+    fi
+    check_vhost
+    check_site_name
+    mv "${conf_dir}/sites/${old_name}.conf" "${conf_dir}/sites/${name}.conf"; [ $? -ne 0 ] && alter_error=1
+  fi
+  if [ $fqdn != $old_fqdn ]; then
+    check_vhost
+    check_site_name
+    hosts_entry delete "$old_fqdn"
+    hosts_entry add "$fqdn"
+    mv "${old_docroot}/sites/${old_fqdn}" "${old_docroot}/sites/${fqdn}"; [ $? -ne 0 ] && alter_error=1
+    mv "${httpdvhost}/${old_fqdn}.conf" "${httpdvhost}/${fqdn}.conf"; [ $? -ne 0 ] && alter_error=1
+  fi
+  if [ $docroot != $old_docroot ]; then
+    check_site_name
+    mv "${old_docroot}/sites/${fqdn}" "${docroot}/sites/${fqdn}"; [ $? -ne 0 ] && alter_error=1
+  fi
+  if [ $dbuser != $old_dbuser ] || [ $dbpass != $old_dbpass ]; then
+    manage_database userdel "$old_dbuser"
+    manage_database useradd "$dbuser" "$dbpass"
+  fi
+  create_vhost
+  create_drupal_settings
+  damp_services restart
 }
 
 site_info () {
@@ -272,12 +363,9 @@ new_site () {
   if [ $? -ne 0 ]
   then
     build_fqdn
-    if [ ! -f "$docroot/sites/default/default.settings.php" ]; then
-      error_exit "could not find default.settings.php"
-    fi
-    if [ -d "$docroot/sites/$fqdn" ]; then
-      error_exit "drupal site already exists with that fqdn"
-    fi
+    check_docroot
+    check_site_name
+    check_vhost
     manage_database create
     create_vhost
     as_user "mkdir -p \"$docroot/sites/$fqdn\""
@@ -290,7 +378,7 @@ new_site () {
         error_exit "error writing to site configuration file"
       fi
     done
-    hosts_entry
+    hosts_entry add "$fqdn"
     damp_services restart
     open_site $name "/install.php"
   else
@@ -312,8 +400,7 @@ remove_site () {
     rm -f "$conf_dir/sites/${site}.conf"
     rm -Rf "$docroot/sites/$fqdn"
     rm -f "$httpdvhost/${fqdn}.conf"
-    hosts_line="/127.0.0.1 $fqdn/d"
-    sed -i "$hosts_line" /etc/hosts
+    hosts_entry delete "$fqdn"
     manage_database delete
     damp_services restart
   else
@@ -340,26 +427,18 @@ set_opts () {
   else
     # Set site specific options
     setopts="$site_opts"
-    for i in $setopts; do
-      if [ ! -z ${!i} ]; then
-        eval new_${i}="${!i}"
-      fi
-    done
-    optfile="$conf_dir/sites/${site}.conf"
-    load_site $site
+    alter_site
+    optfile="$conf_dir/sites/${name}.conf"
   fi
   for i in $setopts; do
-    new_var="new_${i}"
-    if [ -z ${!new_var} ]
-    then
-      sed -i "s|${i}=.*|${i}=${!i}|" "$optfile"
-    else
-      sed -i "s|${i}=.*|${i}=${!new_var}|" "$optfile"
-    fi
+    sed -i "s|${i}=.*|${i}=${!i}|" "$optfile"
     if [ $? -ne 0 ]; then
       error_exit "error writing to the configuration file"
     fi
   done
+  if [ ! -z $alter_error ]; then
+    error_exit "errors occurred while altering site options"
+  fi
 }
 
 setup_stack () {
