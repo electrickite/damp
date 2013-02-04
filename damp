@@ -358,6 +358,9 @@ new_site () {
     if [ $i == "name" ] && [ -z $dbuser ]; then
       dbuser="$name"
     fi
+    if [ $i == "name" ] && [ -z $database ]; then
+      database="$name"
+    fi
   done
   site_exists $name
   if [ $? -ne 0 ]
