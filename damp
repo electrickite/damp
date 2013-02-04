@@ -21,10 +21,14 @@ function error_exit () {
   exit 1
 }
 
+as_user () {
+  su -c "$1" $(who am i | awk '{print $1}')
+}
+
 generate_global_conf () {
   case "$os" in
     "Red Hat"|CentOS)
-      cat > "$conf_dir/damp.conf" <<EOF
+      as_user "cat > \"$conf_dir/damp.conf\" <<EOF
 phpconf=/etc/php.ini
 httpdconf=/etc/httpd/conf/httpd.conf
 httpdvhost=/etc/httpd/conf.d
@@ -35,10 +39,10 @@ rootdbpass=
 dbport=3306
 initpath=/etc/init.d
 lang=en
-EOF
+EOF"
       ;;
     *|Ubuntu|Debian)
-      cat > "$conf_dir/damp.conf" <<EOF
+      as_user "cat > \"$conf_dir/damp.conf\" <<EOF
 phpconf=/etc/php5/apache2/php.ini
 httpdconf=/etc/apache2/apache2.conf
 httpdvhost=/etc/apache2/sites-enabled
@@ -49,7 +53,7 @@ rootdbpass=
 dbport=3306
 initpath=/etc/init.d
 lang=en
-EOF
+EOF"
       ;;
   esac
 }
@@ -81,23 +85,6 @@ detect_os () {
   if [ $os == "Red" ]; then
     os="Red Hat"
   fi
-}
-
-install_packages () {
-  case "$1" in
-    "Red Hat"|CentOS)
-      yum install httpd mysql mysql-server php-cli php-pear php-xml php-mysql php-mbstring php-pdo php-gd
-      if [ ! -z $mail ]; then
-        yum install postfix
-      fi
-      ;;
-    Ubuntu|Debian)
-      apt-get install apache2 mysql-server mysql-client php5 php5-cli php5-mysql php5-xmlrpc php-pear php5-gd
-      if [ ! -z $mail ]; then
-        apt-get install postfix
-      fi
-      ;;
-  esac
 }
 
 requires_site () {
@@ -144,7 +131,7 @@ display_site () {
 }
 
 create_drupal_settings () {
-  cp "$docroot/sites/default/default.settings.php" "$docroot/sites/$fqdn/settings.php"
+  as_user "cp \"$docroot/sites/default/default.settings.php\" \"$docroot/sites/$fqdn/settings.php\""
   if [ $? -ne 0 ]; then
     error_exit "could not write drupal site settings file."
   fi
@@ -223,6 +210,8 @@ site_info () {
   if [ -z $site ]
   then
     # List all sites
+    site_count=$(ls -1 "$conf_dir/sites" | wc -l)
+    echo "Sites installed: $site_count"
     ls -1 "$conf_dir/sites" | sed "s/.conf//"
   else
     # Display information about a site
@@ -234,7 +223,7 @@ site_info () {
 open_site () {
   load_site $1
   url="http://${fqdn}:${httpdport}${2}"
-  su -c "xdg-open $url > /dev/null 2>&1" $(who am i | awk '{print $1}')
+  as_user "xdg-open $url > /dev/null 2>&1"
   if [ $? -ne 0 ]; then
     error_exit "could not open browser. URL is $url"
   fi
@@ -291,9 +280,10 @@ new_site () {
     fi
     manage_database create
     create_vhost
-    mkdir -p "$docroot/sites/$fqdn"
+    as_user "mkdir -p \"$docroot/sites/$fqdn\""
     create_drupal_settings
     chmod -R 777 "$docroot/sites/$fqdn"
+    as_user "touch \"$conf_dir/sites/${name}.conf\""
     for i in $site_opts; do
       echo "${i}=${!i}" >> "$conf_dir/sites/${name}.conf"
       if [ $? -ne 0 ]; then
@@ -310,7 +300,7 @@ new_site () {
 
 remove_site () {
   load_site $site
-  if [ $yes_to_all -eq 0 ]; then
+  if [ -z $yes_to_all ]; then
     echo -n "Are you sure you want to remove site '${name}' [y|n]: "
     read sure
   else
@@ -363,8 +353,22 @@ set_opts () {
 
 setup_stack () {
   detect_os
-  install_packages $os
-  a2enmod rewrite
+  case "$os" in
+    "Red Hat"|CentOS)
+      yum install httpd mysql mysql-server php-cli php-pear php-xml php-mysql php-mbstring php-pdo php-gd
+      if [ ! -z $mail ]; then
+        yum install postfix
+      fi
+      ;;
+    Ubuntu|Debian)
+      apt-get install apache2 mysql-server mysql-client php5 php5-cli php5-mysql php5-xmlrpc php-pear php5-gd
+      a2enmod rewrite
+      if [ ! -z $mail ]; then
+        apt-get install postfix
+      fi
+      ;;
+  esac
+  echo "ServerName localhost" >> "$httpdconf"
   damp_services restart
 }
 
@@ -395,7 +399,7 @@ edit_conf () {
 
 ### Script execution start ###
 
-# Make sure we are running as root - disabled for development
+# Make sure we are running as root
 if [ $(id -u) -ne 0 ]
 then
   error_exit "must be run as root"
@@ -403,10 +407,10 @@ fi
 
 # Create configuration files if not present
 if [ ! -d "$conf_dir" ]; then
-  mkdir -p "$conf_dir"
+  as_user "mkdir -p \"$conf_dir\""
 fi
 if [ ! -d "$conf_dir/sites" ]; then
-  mkdir -p "$conf_dir/sites"
+  as_user "mkdir -p \"$conf_dir/sites\""
 fi
 if [ $? -ne 0 ]; then
   error_exit "could not create configuration directories"
