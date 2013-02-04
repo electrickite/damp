@@ -4,7 +4,7 @@
 
 progname="damp"
 conf_dir="$HOME/.local/share/damp"
-global_opts="phpconf httpdconf httpdvhost httpdport dbconf rootdbuser rootdbpass dbport initpath"
+global_opts="phpconf httpdconf httpdvhost httpdport dbconf rootdbuser rootdbpass dbport initpath lang"
 site_opts="name domain docroot database dbuser dbpass"
 
 
@@ -34,6 +34,7 @@ rootdbuser=root
 rootdbpass=
 dbport=3306
 initpath=/etc/init.d
+lang=en
 EOF
       ;;
     *|Ubuntu|Debian)
@@ -47,6 +48,7 @@ rootdbuser=root
 rootdbpass=
 dbport=3306
 initpath=/etc/init.d
+lang=en
 EOF
       ;;
   esac
@@ -138,7 +140,7 @@ display_site () {
   echo "  DAMP config:   $conf_dir/sites/${name}.conf"
   echo "  Apache config: $httpdvhost/${name}.conf"
   echo ""
-  echo "  Link:          http://${fqdn}"
+  echo "  Link:          http://${fqdn}:${httpdport}"
 }
 
 create_drupal_settings () {
@@ -164,6 +166,59 @@ create_drupal_settings () {
   fi
 }
 
+create_vhost () {
+  if [ -f "$httpdvhost/${fqdn}.conf" ]; then
+    error_exit "there is already and apache vhost with that fqdn"
+  fi
+  cat > "$httpdvhost/${fqdn}.conf" <<EOF
+NameVirtualHost *:${httpdport}
+Listen ${httpdport}
+
+<VirtualHost *:${httpdport}>
+  ServerAdmin ${USER}@localhost
+  DocumentRoot ${docroot}
+  ServerName ${fqdn}
+  RewriteEngine On
+  RewriteOptions inherit
+</VirtualHost>
+
+<Directory ${docroot}>
+  Options +FollowSymLinks Indexes
+  AllowOverride All
+  order allow,deny
+  allow from all
+</Directory>
+EOF
+  if [ $? -ne 0 ]; then
+    error_exit "could not create apache vhost file"
+  fi
+}
+
+hosts_entry () {
+  echo "127.0.0.1 $fqdn" >> /etc/hosts
+  if [ $? -ne 0 ]; then
+    error_exit "could not create hosts file entry"
+  fi
+}
+
+manage_database () {
+  case "$1" in
+    create)
+      mysql -u $rootdbuser --password=$rootdbpass --execute="CREATE DATABASE ${database};"
+      mysql -u $rootdbuser --password=$rootdbpass --execute="GRANT ALL PRIVILEGES ON ${database}.* TO ${dbuser}@localhost IDENTIFIED BY '${dbpass}';"
+      mysql -u $rootdbuser --password=$rootdbpass --execute="flush privileges;"
+      ;;
+    delete)
+      mysql -u $rootdbuser --password=$rootdbpass --execute="DROP USER ${dbuser}@localhost;"
+      mysql -u $rootdbuser --password=$rootdbpass --execute="DROP DATABASE ${database};"
+      mysql -u $rootdbuser --password=$rootdbpass --execute="flush privileges;"
+      ;;
+  esac
+  if [ $? -ne 0 ]; then
+    error_exit "error performing database operation"
+  fi
+}
+
 site_info () {
   if [ -z $site ]
   then
@@ -178,10 +233,33 @@ site_info () {
 
 open_site () {
   load_site $1
-  url="http://${fqdn}"
-  [[ -x $BROWSER ]] && exec "$BROWSER" "$url"
-  browser_path=$(which xdg-open || which gnome-open || which kde-open) && exec "$browser_path" "$url"
-  error_exit "could not open browser"
+  url="http://${fqdn}:${httpdport}${2}"
+  su -c "xdg-open $url > /dev/null 2>&1" $(who am i | awk '{print $1}')
+  if [ $? -ne 0 ]; then
+    error_exit "could not open browser. URL is $url"
+  fi
+}
+
+damp_services () {
+  detect_os
+  service_error=0
+  case "$os" in
+    "Red Hat"|CentOS)
+      service mysqld $1; [ $? -ne 0 ] && service_error=1
+      service httpd $1; [ $? -ne 0 ] && service_error=1
+      ;;
+    Ubuntu)
+      service mysql $1; [ $? -ne 0 ] && service_error=1
+      service apache2 $1; [ $? -ne 0 ] && service_error=1
+      ;;
+    Debian)
+      $initpath/mysql $1; [ $? -ne 0 ] && service_error=1
+      $initpath/apache2 $1; [ $? -ne 0 ] && service_error=1
+      ;;
+  esac
+  if [ $service_error -ne 0 ]; then
+    error_exit "errors occurred while performing the requested operations"
+  fi
 }
 
 new_site () {
@@ -211,6 +289,8 @@ new_site () {
     if [ -d "$docroot/sites/$fqdn" ]; then
       error_exit "drupal site already exists with that fqdn"
     fi
+    manage_database create
+    create_vhost
     mkdir -p "$docroot/sites/$fqdn"
     create_drupal_settings
     chmod -R 777 "$docroot/sites/$fqdn"
@@ -220,7 +300,9 @@ new_site () {
         error_exit "error writing to site configuration file"
       fi
     done
-    open_site $name
+    hosts_entry
+    damp_services restart
+    open_site $name "/install.php?locale=${lang}"
   else
     error_exit "site with that name already exists"
   fi
@@ -228,8 +310,25 @@ new_site () {
 
 remove_site () {
   load_site $site
-  rm -f "$conf_dir/sites/${site}.conf"
-  rm -Rf "$docroot/sites/$fqdn"
+  if [ $yes_to_all -eq 0 ]; then
+    echo -n "Are you sure you want to remove site '${name}' [y|n]: "
+    read sure
+  else
+    sure="y"
+  fi
+  if [ "${sure}" == "y" ] ||
+     [ "${sure}" == "Y" ]
+  then
+    rm -f "$conf_dir/sites/${site}.conf"
+    rm -Rf "$docroot/sites/$fqdn"
+    rm -f "$httpdvhost/${fqdn}.conf"
+    hosts_line="/127.0.0.1 $fqdn/d"
+    sed -i "$hosts_line" /etc/hosts
+    manage_database delete
+    damp_services restart
+  else
+    exit 0
+  fi
 }
 
 update_sites () {
@@ -262,31 +361,11 @@ set_opts () {
   done
 }
 
-damp_services () {
-  detect_os
-  service_error=0
-  case "$os" in
-    "Red Hat"|CentOS)
-      service mysqld $1; [ $? -ne 0 ] && service_error=1
-      service httpd $1; [ $? -ne 0 ] && service_error=1
-      ;;
-    Ubuntu)
-      service mysql $1; [ $? -ne 0 ] && service_error=1
-      service apache2 $1; [ $? -ne 0 ] && service_error=1
-      ;;
-    Debian)
-      $initpath/mysql $1; [ $? -ne 0 ] && service_error=1
-      $initpath/apache2 $1; [ $? -ne 0 ] && service_error=1
-      ;;
-  esac
-  if [ $service_error -ne 0 ]; then
-    error_exit "errors occurred while performing the requested operations"
-  fi
-}
-
 setup_stack () {
   detect_os
   install_packages $os
+  a2enmod rewrite
+  damp_services restart
 }
 
 edit_conf () {
@@ -317,10 +396,10 @@ edit_conf () {
 ### Script execution start ###
 
 # Make sure we are running as root - disabled for development
-#if [ $(id -u) -ne 0 ]
-#then
-#  error_exit "must be run as root"
-#fi
+if [ $(id -u) -ne 0 ]
+then
+  error_exit "must be run as root"
+fi
 
 # Create configuration files if not present
 if [ ! -d "$conf_dir" ]; then
@@ -348,7 +427,7 @@ then
 fi
 
 # Execute getopt to parse arguments
-ARGS=$(getopt -o hn:d:mp:b: -l help,name:,domain:,path:,docroot:,db:,database:,mail,phpconf:,httpdconf:,httpdvhost:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath: -n "$progname" -- "$@");
+ARGS=$(getopt -o hn:d:mp:b:y -l help,name:,domain:,path:,docroot:,db:,database:,mail,phpconf:,httpdconf:,httpdvhost:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath: -n "$progname" -- "$@");
 
 # Bad arguments
 if [ $? -ne 0 ];
@@ -398,6 +477,10 @@ while true; do
     -m|--mail)
       shift;
       mail="install"
+      ;;
+    -y)
+      shift;
+      yes_to_all=1
       ;;
     --phpconf)
       shift;
