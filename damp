@@ -1,6 +1,8 @@
 #!/bin/bash
 
-### Script configuration variables ###
+########################################
+##          Global variables          ##
+########################################
 
 progname="damp"
 conf_dir="$HOME/.local/share/damp"
@@ -8,7 +10,9 @@ global_opts="phpconf httpdconf httpdvhost httpdport dbconf rootdbuser rootdbpass
 site_opts="name domain docroot database dbuser dbpass"
 
 
-### Function definitions ###
+########################################
+##        Function definitions        ##
+########################################
 
 # Define basic help text
 usage () {
@@ -21,10 +25,12 @@ function error_exit () {
   exit 1
 }
 
+# Executes command as the logged in user instead ot root
 as_user () {
   su -c "$1" $(who am i | awk '{print $1}')
 }
 
+# Generate the default global options file for various operating systems
 generate_global_conf () {
   case "$os" in
     "Red Hat"|CentOS)
@@ -58,6 +64,7 @@ EOF"
   esac
 }
 
+# Parse configuration file options and load into global variables
 parse_conf () {
   while read propline ; do 
     # ignore comment lines
@@ -70,6 +77,7 @@ parse_conf () {
   fi
 }
 
+# Detect operating system - This can probably be improved
 detect_os () {
   distributions="Red CentOS Ubuntu Debian"
   os=""
@@ -87,6 +95,7 @@ detect_os () {
   fi
 }
 
+# Checks if a site has been specified
 requires_site () {
   if [ -z $site ]
   then
@@ -94,10 +103,12 @@ requires_site () {
   fi
 }
 
+# checks whether a site (really the config file) exists
 site_exists () {
   [ -f "$conf_dir/sites/${1}.conf" ]
 }
 
+# Builds the FQDN for a site from the name and domain
 build_fqdn () {
   if [ ! -z $domain ]
     then
@@ -107,6 +118,7 @@ build_fqdn () {
   fi
 }
 
+# Load site options into global variables
 load_site () {
   site_exists "$1"
   if [ $? == 0 ]
@@ -118,6 +130,7 @@ load_site () {
   fi
 }
 
+# Print formatted site information
 display_site () {
   echo "Site information:"
   echo "  Name:          $name"
@@ -130,6 +143,7 @@ display_site () {
   echo "  Link:          http://${fqdn}:${httpdport}"
 }
 
+# Generate a settings.php file for a Drupal site with correct database settings
 create_drupal_settings () {
   as_user "cp -f \"$docroot/sites/default/default.settings.php\" \"$docroot/sites/$fqdn/settings.php\""
   if [ $? -ne 0 ]; then
@@ -154,12 +168,14 @@ create_drupal_settings () {
   chmod 644 "$docroot/sites/$fqdn/settings.php"
 }
 
+# Make sure there is no vhost file with the given name.
 check_vhost () {
   if [ -f "$httpdvhost/${fqdn}.conf" ]; then
     error_exit "there is already and apache vhost with that fqdn"
   fi
 }
 
+# Generate Apache vhost configuration file for a Drupal site
 create_vhost () {
   cat > "$httpdvhost/${fqdn}.conf" <<EOF
 <VirtualHost *:${httpdport}>
@@ -182,6 +198,7 @@ EOF
   fi
 }
 
+# Add or remove records from the /etc/hosts file
 hosts_entry () {
   case "$1" in
     add)
@@ -197,6 +214,7 @@ hosts_entry () {
   fi
 }
 
+# Perform MySQL database operations
 manage_database () {
   case "$1" in
     create)
@@ -220,18 +238,22 @@ manage_database () {
   fi
 }
 
+# Make sure the given docroot is a valid Drupal codebase by checking the
+# default.settings.php file
 check_docroot () {
   if [ ! -f "${docroot}/sites/default/default.settings.php" ]; then
     error_exit "could not find default.settings.php"
   fi
 }
 
+# Make sure the site name is not already in use in this codebase
 check_site_name () {
   if [ -d "${docroot}/sites/${fqdn}" ]; then
     error_exit "drupal site already exists with that fqdn"
   fi
 }
 
+# Change site options and alter files/configurations to match
 alter_site () {
   # MySQL databases cannot be reliably renamed
   if [ ! -z $database ]; then
@@ -295,6 +317,7 @@ alter_site () {
   damp_services restart
 }
 
+# Manage Apache and MySQL services
 damp_services () {
   detect_os
   service_error=0
@@ -317,10 +340,12 @@ damp_services () {
   fi
 }
 
+# Print a list of site names, one per line
 list_sites () {
   ls -1 "$conf_dir/sites" | sed "s/.conf//"
 }
 
+# Update Apache port settings for all sites
 update_port () {
   while read line
   do
@@ -330,6 +355,7 @@ update_port () {
   damp_services restart
 }
 
+# Print a site list if no site is specified, or detailed site information
 site_info () {
   if [ -z $site ]
   then
@@ -344,6 +370,7 @@ site_info () {
   fi
 }
 
+# Open a site in a web browser
 open_site () {
   load_site $1
   url="http://${fqdn}:${httpdport}${2}"
@@ -353,6 +380,7 @@ open_site () {
   fi
 }
 
+# Create a new site
 new_site () {
   if [ -z $dbpass ]; then
     dbpass=$(< /dev/urandom tr -dc A-Za-z0-9 | head -c8)
@@ -400,6 +428,7 @@ new_site () {
   fi
 }
 
+# Remove an existing site and all associated files/configurations
 remove_site () {
   load_site $site
   if [ -z $yes_to_all ]; then
@@ -421,6 +450,7 @@ remove_site () {
   fi
 }
 
+# Set site/global options
 set_opts () {
   if [ -z $site ]
   then
@@ -453,6 +483,7 @@ set_opts () {
   fi
 }
 
+# Install and configure packages for the DAMP stack
 setup_stack () {
   detect_os
   case "$os" in
@@ -474,6 +505,7 @@ setup_stack () {
   damp_services restart
 }
 
+# Edit service configuration files in the terminal
 edit_conf () {
   if [ -z $1 ]
   then
@@ -499,6 +531,7 @@ edit_conf () {
   fi
 }
 
+# Fix permission issues for the site file system
 fix_perm () {
   load_site $site
   chmod 755 "${docroot}/sites/${fqdn}" >/dev/null 2>&1
@@ -506,7 +539,10 @@ fix_perm () {
   find "${docroot}/sites/${fqdn}/files" -type f -print0 | xargs -0 chmod o+rw >/dev/null 2>&1
 }
 
-### Script execution start ###
+
+########################################
+##       Script execution start       ##
+########################################
 
 # Make sure we are running as root
 if [ $(id -u) -ne 0 ]
