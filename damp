@@ -394,8 +394,7 @@ remove_site () {
   else
     sure="y"
   fi
-  if [ "${sure}" == "y" ] ||
-     [ "${sure}" == "Y" ]
+  if [ "${sure}" == "y" ] || [ "${sure}" == "Y" ]
   then
     rm -f "$conf_dir/sites/${site}.conf"
     rm -Rf "$docroot/sites/$fqdn"
@@ -406,10 +405,6 @@ remove_site () {
   else
     exit 0
   fi
-}
-
-update_sites () {
-  echo "update sites operation called"
 }
 
 set_opts () {
@@ -485,6 +480,12 @@ edit_conf () {
         ;;
     esac
   fi
+}
+
+fix_perm () {
+  load_site $site
+  find "${docroot}/sites/${fqdn}" -type d -print0 | xargs -0 chmod o+rwx 
+  find "${docroot}/sites/${fqdn}" -type f -print0 | xargs -0 chmod o+rw
 }
 
 ### Script execution start ###
@@ -684,6 +685,11 @@ case "$operation" in
     ;;
   conf)
     edit_conf $site
+    exit 0
+    ;;
+  fix|fixperms|fixperm)
+    requires_site
+    fix_perm
     exit 0
     ;;
   *)
