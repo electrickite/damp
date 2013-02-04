@@ -32,7 +32,7 @@ generate_global_conf () {
 phpconf=/etc/php.ini
 httpdconf=/etc/httpd/conf/httpd.conf
 httpdvhost=/etc/httpd/conf.d
-httpdport=8080
+httpdport=80
 dbconf=/etc/my.cnf
 rootdbuser=root
 rootdbpass=
@@ -46,7 +46,7 @@ EOF"
 phpconf=/etc/php5/apache2/php.ini
 httpdconf=/etc/apache2/apache2.conf
 httpdvhost=/etc/apache2/sites-enabled
-httpdport=8080
+httpdport=80
 dbconf=/etc/mysql/my.cnf
 rootdbuser=root
 rootdbpass=
@@ -151,6 +151,7 @@ create_drupal_settings () {
     echo "
 \$db_url = 'mysql://${dbuser}:${dbpass}@localhost/${database}';" >> "$docroot/sites/$fqdn/settings.php"
   fi
+  chmod 644 "$docroot/sites/$fqdn/settings.php"
 }
 
 check_vhost () {
@@ -161,9 +162,6 @@ check_vhost () {
 
 create_vhost () {
   cat > "$httpdvhost/${fqdn}.conf" <<EOF
-NameVirtualHost *:${httpdport}
-Listen ${httpdport}
-
 <VirtualHost *:${httpdport}>
   ServerAdmin ${USER}@localhost
   DocumentRoot ${docroot}
@@ -297,29 +295,6 @@ alter_site () {
   damp_services restart
 }
 
-site_info () {
-  if [ -z $site ]
-  then
-    # List all sites
-    site_count=$(ls -1 "$conf_dir/sites" | wc -l)
-    echo "Sites installed: $site_count"
-    ls -1 "$conf_dir/sites" | sed "s/.conf//"
-  else
-    # Display information about a site
-    load_site $site
-    display_site
-  fi
-}
-
-open_site () {
-  load_site $1
-  url="http://${fqdn}:${httpdport}${2}"
-  as_user "xdg-open $url > /dev/null 2>&1"
-  if [ $? -ne 0 ]; then
-    error_exit "could not open browser. URL is $url"
-  fi
-}
-
 damp_services () {
   detect_os
   service_error=0
@@ -339,6 +314,42 @@ damp_services () {
   esac
   if [ $service_error -ne 0 ]; then
     error_exit "errors occurred while performing the requested operations"
+  fi
+}
+
+list_sites () {
+  ls -1 "$conf_dir/sites" | sed "s/.conf//"
+}
+
+update_port () {
+  while read line
+  do
+    load_site $line
+    create_vhost
+  done <<< "$(list_sites)"
+  damp_services restart
+}
+
+site_info () {
+  if [ -z $site ]
+  then
+    # List all sites
+    site_count=$(ls -1 "$conf_dir/sites" | wc -l)
+    echo "Sites installed: $site_count"
+    list_sites
+  else
+    # Display information about a site
+    load_site $site
+    display_site
+  fi
+}
+
+open_site () {
+  load_site $1
+  url="http://${fqdn}:${httpdport}${2}"
+  as_user "xdg-open $url > /dev/null 2>&1"
+  if [ $? -ne 0 ]; then
+    error_exit "could not open browser. URL is $url"
   fi
 }
 
@@ -373,7 +384,7 @@ new_site () {
     create_vhost
     as_user "mkdir -p \"$docroot/sites/$fqdn\""
     create_drupal_settings
-    chmod -R 777 "$docroot/sites/$fqdn"
+    chmod a+w "$docroot/sites/$fqdn"
     as_user "touch \"$conf_dir/sites/${name}.conf\""
     for i in $site_opts; do
       echo "${i}=${!i}" >> "$conf_dir/sites/${name}.conf"
@@ -433,6 +444,9 @@ set_opts () {
     if [ $? -ne 0 ]; then
       error_exit "error writing to the configuration file"
     fi
+    if [ $i == "httpdport" ]; then
+      update_port
+    fi
   done
   if [ ! -z $alter_error ]; then
     error_exit "errors occurred while altering site options"
@@ -449,8 +463,10 @@ setup_stack () {
       fi
       ;;
     Ubuntu|Debian)
-      apt-get install apache2 mysql-server mysql-client php5 php5-cli php5-mysql php5-xmlrpc php-pear php5-gd
+      apt-get install apache2 mysql-server mysql-client php5 php5-cli php5-mysql php5-xmlrpc php-pear php5-gd php5-dev build-essential
       a2enmod rewrite
+      pecl install uploadprogress
+      echo "extension=uploadprogress.so" >> "$phpconf"
       if [ ! -z $mail ]; then
         apt-get install postfix
       fi
@@ -487,8 +503,9 @@ edit_conf () {
 
 fix_perm () {
   load_site $site
-  find "${docroot}/sites/${fqdn}" -type d -print0 | xargs -0 chmod o+rwx 
-  find "${docroot}/sites/${fqdn}" -type f -print0 | xargs -0 chmod o+rw
+  chmod 755 "${docroot}/sites/${fqdn}" >/dev/null 2>&1
+  find "${docroot}/sites/${fqdn}/files" -type d -print0 | xargs -0 chmod o+rwx >/dev/null 2>&1
+  find "${docroot}/sites/${fqdn}/files" -type f -print0 | xargs -0 chmod o+rw >/dev/null 2>&1
 }
 
 ### Script execution start ###
@@ -656,7 +673,7 @@ site="$2"
 
 # Process arguments and perform the requested operation
 case "$operation" in
-  list|info)
+  list|info|ls)
     site_info
     exit 0
     ;;
@@ -669,12 +686,17 @@ case "$operation" in
     open_site $site
     exit 0
     ;;
+  install)
+    requires_site
+    open_site $site "/install.php"
+    exit 0
+    ;;
   remove|delete|rm|del)
     requires_site
     remove_site
     exit 0
     ;;
-  set)
+  set|update)
     set_opts
     exit 0
     ;;
@@ -682,11 +704,11 @@ case "$operation" in
     damp_services $operation
     exit 0
     ;;
-  setup|install)
+  setup)
     setup_stack
     exit 0
     ;;
-  conf)
+  conf|configure)
     edit_conf $site
     exit 0
     ;;
