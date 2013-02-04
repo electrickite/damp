@@ -7,43 +7,45 @@ Drupal/Apache/MySQL/PHP (DAMP) stack.
 Operations
 ----------
 
-list - Shows a list of all installed sites  
-list/info - get details about a site  
+list/info - Shows a list of installed sites or details about a particular site  
 new - create a new site  
 open - open a site in a web browser  
+install - open the web-based site installer
 remove - remove a site  
-update - sync services configuration with installed sites  
-set - set variables for a site  
+set - set site/global options  
 start - start services  
 stop - stop services  
 restart - restart services  
 status - show status of services  
-setup - install and configure packages  
-global - set global options  
-conf - edit configuration files  
+setup - install and configure DAMP stack  
+configure - edit configuration files  
+fixperms - fix site directory permissions  
 
 Options
 -------
 
 name - the site shortname  
 domain - the site domain  
-path - the site document root  
+docroot - the site document root  
 database - the database name  
 
-mail - install MTA during setup
+dbuser - the database user  
+dbpass - the database user password  
+
+y - answer yes to all prompts  
+mail - install MTA during setup  
 phpconf - php conf file path  
 httpdconf - the httpd configuration file path  
-httpdvhost - the vhost configuration file directory
+httpdvhost - the vhost configuration file directory  
 httpdport - the httpd port number  
 dbconf - the mysql configuration file path  
-dbuser - the database root user  
-dbpass - the database root user password  
 dbport - the database port number  
 initpath - path to service init scripts  
+lang - language to use during install  
 
 Examples
 --------
 
 damp open foo  
-damp set --path /bar/baz --domain localhost foo  
-damp conf php  
+damp set --domain example.com mysite  
+damp configure php  
