@@ -292,7 +292,7 @@ new_site () {
     done
     hosts_entry
     damp_services restart
-    open_site $name "/install.php?locale=${lang}"
+    open_site $name "/install.php"
   else
     error_exit "site with that name already exists"
   fi
@@ -339,12 +339,23 @@ set_opts () {
     fi
   else
     # Set site specific options
-    load_site $site
     setopts="$site_opts"
+    for i in $setopts; do
+      if [ ! -z ${!i} ]; then
+        eval new_${i}="${!i}"
+      fi
+    done
     optfile="$conf_dir/sites/${site}.conf"
+    load_site $site
   fi
   for i in $setopts; do
-    sed -i "s|${i}=.*|${i}=${!i}|" "$optfile"
+    new_var="new_${i}"
+    if [ -z ${!new_var} ]
+    then
+      sed -i "s|${i}=.*|${i}=${!i}|" "$optfile"
+    else
+      sed -i "s|${i}=.*|${i}=${!new_var}|" "$optfile"
+    fi
     if [ $? -ne 0 ]; then
       error_exit "error writing to the configuration file"
     fi
