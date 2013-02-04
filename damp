@@ -457,21 +457,19 @@ setup_stack () {
   detect_os
   case "$os" in
     "Red Hat"|CentOS)
-      yum install httpd mysql mysql-server php-cli php-pear php-xml php-mysql php-mbstring php-pdo php-gd
-      if [ ! -z $mail ]; then
-        yum install postfix
-      fi
+      yum install httpd mysql mysql-server php-cli php-pear php-xml php-mysql php-mbstring php-pdo php-gd php-devel
+      yum groupinstall "Development Tools"
       ;;
     Ubuntu|Debian)
       apt-get install apache2 mysql-server mysql-client php5 php5-cli php5-mysql php5-xmlrpc php-pear php5-gd php5-dev build-essential
       a2enmod rewrite
-      pecl install uploadprogress
-      echo "extension=uploadprogress.so" >> "$phpconf"
-      if [ ! -z $mail ]; then
-        apt-get install postfix
-      fi
       ;;
   esac
+  if [ ! -z $mail ]; then
+    apt-get install postfix
+  fi
+  pecl install uploadprogress
+  echo "extension=uploadprogress.so" >> "$phpconf"
   echo "ServerName localhost" >> "$httpdconf"
   damp_services restart
 }
