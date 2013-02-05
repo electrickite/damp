@@ -19,10 +19,10 @@ commands="command echo if while for break case exit su who awk cat grep cp mv ls
 # Define basic help text
 usage () {
   cat <<EOF
-Usage: damp OPERATION [OPTION]... [SITE]
+Usage: damp COMMAND [OPTION]... [SITE]
 Manage local DAMP (Drupal, Apache, MySQL, PHP) environment and sites.
 
-Operations:
+Commands:
   list, ls                 show a list of installed sites
   info                     view details about a particular site
   new                      create a new site
@@ -844,7 +844,7 @@ while true; do
   esac
 done
 
-# Store operation and site parameters in global variables
+# Store command and site parameters in global variables
 operation="$1"
 site="$2" 
 
@@ -884,7 +884,7 @@ case "$operation" in
     fix_perm
     ;;
   *)
-    echo "${progname}: operation not recognized - try $0 --help" 1>&2
+    echo "${progname}: command not recognized - try $0 --help" 1>&2
     exit 1
     ;;
 esac
