@@ -4,6 +4,9 @@
 ##          Global variables          ##
 ########################################
 
+# Uncomment to override default configuration directory
+#conf_dir="$HOME/.local/share/damp"
+
 progname="damp"
 prog_version="0.1.0"
 global_opts="phpconf httpdconf httpdvhost httpdport dbconf rootdbuser rootdbpass dbport initpath lang"
@@ -141,7 +144,7 @@ as_user () {
 create_conf_dir () {
   if [ ! -d "$conf_dir" ]; then
     as_user "mkdir -p \"$conf_dir\"" $conf_user
-    chmod 750 "$conf_dir"
+    chmod 755 "$conf_dir"
   fi
   if [ ! -d "$conf_dir/sites" ]; then
     as_user "mkdir -p \"$conf_dir/sites\"" $conf_user
@@ -649,9 +652,36 @@ setup_stack () {
   pecl install uploadprogress
   echo "extension=uploadprogress.so" >> "$phpconf"
   echo "ServerName localhost" >> "$httpdconf"
+
+  # Install the script to system directories
+  if [ ! -z $install ]; then
+    cp "$0" /usr/local/bin
+    if [ $? -ne 0 ]; then
+      error_exit "could not copy script to /usr/local/bin"
+    fi
+    chmod 755 /usr/local/bin/damp
+    old_conf_dir="$conf_dir"
+    conf_dir="/etc/damp"
+    conf_user="root"
+    if [ -d "$old_conf_dir" ]
+    then
+      cp -R "$old_conf_dir" /etc
+      if [ $? -ne 0 ]; then
+        error_exit "error copying local configuration files to /etc/damp"
+      fi
+      chmod -R 640 /etc/damp
+      chmod 755 /etc/damp
+      chmod 750 /etc/damp/sites
+      rm -Rf "$old_conf_dir"
+      echo "$progname: script installed successfully"
+    else
+      create_conf_dir
+    fi
+  fi
+
   damp_services restart
   as_user "touch \"${conf_dir}/setup-run\"" $conf_user
-  chmod 640 "${conf_dir}/setup-run"
+  chmod 644 "${conf_dir}/setup-run"
 }
 
 # Edit service configuration files in the terminal
@@ -691,21 +721,31 @@ fix_perm () {
 ########################################
 
 # What configuration directory are we using?
-if [ -f "$conf_dir/damp.conf" ]
+if [ -z $conf_dir ]
 then
-  conf_dir="$HOME/.local/share/damp"
-elif [ -d "/etc/damp" ]
-then
-  conf_dir="/etc/damp"
-  conf_user="root"
-else
-  conf_dir="$HOME/.local/share/damp"
+  if [ -f "$HOME/.local/share/damp/damp.conf" ]
+  then
+    conf_dir="$HOME/.local/share/damp"
+  elif [ -d "/etc/damp" ]
+  then
+    conf_dir="/etc/damp"
+    conf_user="root"
+  else
+    conf_dir="$HOME/.local/share/damp"
+  fi
 fi
 
 # Do we have all the commands we need?
 if [ ! -f "${conf_dir}/setup-run" ]; then
   check_commands
   echo "${progname}: Setup has not been run. Try ${0} setup"
+fi
+
+# Check if we have any arguments at all
+if [ -z $1 ]
+then
+  usage
+  exit 1
 fi
 
 # Make sure we are running as root
@@ -723,13 +763,6 @@ fi
 
 # Parse global configuration file
 parse_conf "$conf_dir/damp.conf"
-
-# Check if we have any arguments at all
-if [ -z $1 ]
-then
-  usage
-  exit 1
-fi
 
 # Execute getopt to parse arguments
 ARGS=$(getopt -o hvn:d:miup:b:y -l help,version,name:,domain:,path:,docroot:,db:,database:,mail,install,drush,phpconf:,httpdconf:,httpdvhost:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath:,language:,yes -n "$progname" -- "$@");
