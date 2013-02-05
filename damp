@@ -477,7 +477,11 @@ site_info () {
 # Open a site in a web browser
 open_site () {
   load_site $1
-  url="http://${fqdn}:${httpdport}${2}"
+  option_path=""
+  if [ ! -z $install ]; then
+    option_path="/install.php"
+  fi
+  url="http://${fqdn}:${httpdport}${option_path}${2}"
   as_user "xdg-open $url > /dev/null 2>&1"
   if [ $? -ne 0 ]; then
     error_exit "could not open browser. URL is $url"
@@ -699,7 +703,7 @@ then
 fi
 
 # Execute getopt to parse arguments
-ARGS=$(getopt -o hvn:d:mp:b:y -l help,version,name:,domain:,path:,docroot:,db:,database:,mail,phpconf:,httpdconf:,httpdvhost:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath:,language:,yes -n "$progname" -- "$@");
+ARGS=$(getopt -o hvn:d:mip:b:y -l help,version,name:,domain:,path:,docroot:,db:,database:,mail,install,phpconf:,httpdconf:,httpdvhost:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath:,language:,yes -n "$progname" -- "$@");
 
 # Bad arguments
 if [ $? -ne 0 ];
@@ -753,7 +757,11 @@ while true; do
       ;;
     -m|--mail)
       shift;
-      mail="install"
+      mail="mail"
+      ;;
+    -i|--install)
+      shift;
+      install="install"
       ;;
     -y|--yes)
       shift;
@@ -851,10 +859,6 @@ case "$operation" in
   open)
     requires_site
     open_site $site
-    ;;
-  install)
-    requires_site
-    open_site $site "/install.php"
     ;;
   remove|delete|rm|del)
     requires_site
