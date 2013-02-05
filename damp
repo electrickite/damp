@@ -8,7 +8,7 @@ progname="damp"
 conf_dir="$HOME/.local/share/damp"
 global_opts="phpconf httpdconf httpdvhost httpdport dbconf rootdbuser rootdbpass dbport initpath lang"
 site_opts="name domain docroot database dbuser dbpass"
-commands="command echo exit su who awk cat grep cp mv ls chmod sed mysql eval xdg-open read tr head rm find xargs id mkdir getopt set shift"
+commands="command echo if while for break case exit su who awk cat grep cp mv ls chmod sed mysql eval xdg-open read tr head rm find xargs id mkdir getopt set shift"
 
 
 ########################################
@@ -17,7 +17,66 @@ commands="command echo exit su who awk cat grep cp mv ls chmod sed mysql eval xd
 
 # Define basic help text
 usage () {
-  echo "TODO: usage text"
+  cat <<EOF
+Usage: damp OPERATION [OPTION]... [SITE]
+Manage local DAMP (Drupal, Apache, MySQL, PHP) environment and sites.
+
+Operations:
+  list, ls                 show a list of installed sites
+  info                     view details about a particular site
+  new                      create a new site
+  open                     open a site in a web browser
+  install                  open the web-based site installer
+  remove, rm, delete       delete a site
+  set                      set site/global options
+  get                      show site/global cofiguration files
+  start                    start services  
+  stop                     stop services  
+  restart                  restart services  
+  status                   show status of services  
+  setup                    install and configure DAMP stack  
+  configure, conf          edit configuration files  
+  fixperms, fix            fix site directory permissions  
+
+Site Options:
+  -b, --database, --db     database name
+  -d, --domain             domain name (ie. example.com)
+  -n, --name               site shortname (must be unique)
+  -p, --docroot, --path    full path to the Drupal installation
+
+Shared Options:
+  --dbuser                 database user name, either site user or root account 
+  --dbpass                 the database user password                  
+
+Global Options:
+  --dbconf                 mysql configuration file path
+  --dbport                 mysql port number
+  -h, --help               display this help and exit
+  --httpdconf              apache configuration file path
+  --httpdport              apache port number
+  --httpdvhost             apache vhost configuration file directory
+  --initpath               path to service init scripts
+  --language               language to use during site installs
+  -m, --mail               install system MTA, only used during setup
+  --phpconf                php configuration file path
+  -v, --version            output version information and exit
+  -y, --yes                answer yes to all prompts
+
+With no SITE is specified, operatons have global scope is applicable. Script
+must be run as root.
+
+Examples:
+  damp list
+  damp open mysite
+  damp set --domain example.com mysite
+  damp new --name mysite -d example.com
+  damp rm -y mysite
+  damp configure php
+
+Report bugs at <https://github.com/electrickite/damp/issues>
+DAMP homepage: <https://github.com/electrickite/damp>
+
+EOF
 }
 
 # Error handling
@@ -609,7 +668,7 @@ then
 fi
 
 # Execute getopt to parse arguments
-ARGS=$(getopt -o hn:d:mp:b:y -l help,name:,domain:,path:,docroot:,db:,database:,mail,phpconf:,httpdconf:,httpdvhost:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath:,language: -n "$progname" -- "$@");
+ARGS=$(getopt -o hn:d:mp:b:y -l help,name:,domain:,path:,docroot:,db:,database:,mail,phpconf:,httpdconf:,httpdvhost:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath:,language:,yes -n "$progname" -- "$@");
 
 # Bad arguments
 if [ $? -ne 0 ];
@@ -660,7 +719,7 @@ while true; do
       shift;
       mail="install"
       ;;
-    -y)
+    -y|--yes)
       shift;
       yes_to_all=1
       ;;
