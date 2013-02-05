@@ -141,9 +141,11 @@ as_user () {
 create_conf_dir () {
   if [ ! -d "$conf_dir" ]; then
     as_user "mkdir -p \"$conf_dir\"" $conf_user
+    chmod 750 "$conf_dir"
   fi
   if [ ! -d "$conf_dir/sites" ]; then
     as_user "mkdir -p \"$conf_dir/sites\"" $conf_user
+    chmod 750 "$conf_dir/sites"
   fi
   if [ $? -ne 0 ]; then
     error_exit "could not create configuration directories"
@@ -182,6 +184,7 @@ lang=en
 EOF" $conf_user
       ;;
   esac
+  chmod 640 "$conf_dir/damp.conf"
 }
 
 # Parse configuration file options and load into global variables
@@ -538,6 +541,7 @@ new_site () {
     create_drupal_settings
     chmod a+w "$docroot/sites/$fqdn"
     as_user "touch \"$conf_dir/sites/${name}.conf\"" $conf_user
+    chmod 640 "$conf_dir/sites/${name}.conf"
     for i in $site_opts; do
       echo "${i}=${!i}" >> "$conf_dir/sites/${name}.conf"
       if [ $? -ne 0 ]; then
@@ -647,6 +651,7 @@ setup_stack () {
   echo "ServerName localhost" >> "$httpdconf"
   damp_services restart
   as_user "touch \"${conf_dir}/setup-run\"" $conf_user
+  chmod 640 "${conf_dir}/setup-run"
 }
 
 # Edit service configuration files in the terminal
