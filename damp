@@ -473,12 +473,15 @@ list_sites () {
 
 # Update Apache port settings for all sites
 update_port () {
-  while read line
-  do
-    load_site $line
-    create_vhost
-  done <<< "$(list_sites)"
-  damp_services restart
+  if [ ! -z $(list_sites) ]
+  then
+    while read line
+    do
+      load_site $line
+      create_vhost
+    done <<< "$(list_sites)"
+    damp_services restart
+  fi
 }
 
 # Print a site list if no site is specified, or detailed site information
@@ -695,11 +698,14 @@ function uninstall_script () {
   fi
   if [ "${sure}" == "y" ] || [ "${sure}" == "Y" ]
   then
-    while read line
-    do
-      site=$line
-      remove_site
-    done <<< "$(list_sites)"
+    if [ ! -z $(list_sites) ]
+    then
+      while read line
+      do
+        site=$line
+        remove_site
+      done <<< "$(list_sites)"
+    fi
     damp_services restart
     rm -Rf "$conf_dir"
     rm -f /usr/local/bin/damp > /dev/null 2>&1
