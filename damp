@@ -5,6 +5,7 @@
 ########################################
 
 progname="damp"
+prog_version="0.1.0"
 conf_dir="$HOME/.local/share/damp"
 global_opts="phpconf httpdconf httpdvhost httpdport dbconf rootdbuser rootdbpass dbport initpath lang"
 site_opts="name domain docroot database dbuser dbpass"
@@ -83,6 +84,36 @@ EOF
 error_exit () {
   echo "${progname}: ${1:-"unknown error"}" 1>&2
   exit 1
+}
+
+show_version () {
+  detect_os
+  case "$os" in
+    Ubuntu|Debian)
+      apache_ver="apache2"
+      ;;
+    *|"Red Hat"|CentOS)
+      apache_ver="httpd"
+      ;;
+  esac
+  command -v $apache_ver > /dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    echo "apache not found"
+  else
+    eval "$apache_ver -v"
+  fi
+  echo ""
+  for i in mysql php; do
+    command -v $i > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+      echo "$i not found"
+    else
+      eval "$i --version"
+    fi
+    echo ""
+  done
+  echo "DAMP script version $prog_version"
+  echo "DAMP is under heavy development - expect frequent changes"
 }
 
 # Verify we have access to all necessary shell commands
@@ -668,7 +699,7 @@ then
 fi
 
 # Execute getopt to parse arguments
-ARGS=$(getopt -o hn:d:mp:b:y -l help,name:,domain:,path:,docroot:,db:,database:,mail,phpconf:,httpdconf:,httpdvhost:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath:,language:,yes -n "$progname" -- "$@");
+ARGS=$(getopt -o hvn:d:mp:b:y -l help,version,name:,domain:,path:,docroot:,db:,database:,mail,phpconf:,httpdconf:,httpdvhost:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath:,language:,yes -n "$progname" -- "$@");
 
 # Bad arguments
 if [ $? -ne 0 ];
@@ -685,6 +716,11 @@ while true; do
     -h|--help)
       shift
       usage
+      exit 0
+      ;;
+    -v|--version)
+      shift
+      show_version
       exit 0
       ;;
     -n|--name)
