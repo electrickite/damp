@@ -8,6 +8,7 @@ progname="damp"
 conf_dir="$HOME/.local/share/damp"
 global_opts="phpconf httpdconf httpdvhost httpdport dbconf rootdbuser rootdbpass dbport initpath lang"
 site_opts="name domain docroot database dbuser dbpass"
+commands="command echo exit su who awk cat grep cp mv ls chmod sed mysql eval xdg-open read tr head rm find xargs id mkdir getopt set shift"
 
 
 ########################################
@@ -20,9 +21,22 @@ usage () {
 }
 
 # Error handling
-function error_exit () {
+error_exit () {
   echo "${progname}: ${1:-"unknown error"}" 1>&2
   exit 1
+}
+
+# Verify we have access to all necessary shell commands
+check_commands () {
+  if [ ! -f "${conf_dir}/setup-run" ]; then
+    for i in $commands; do
+      command -v $i > /dev/null 2>&1
+      if [ $? -ne 0 ]; then
+        error_exit "required command $i not found"
+      fi
+    done
+    echo "${progname}: Setup has noot been run. Try ${0} setup"
+  fi
 }
 
 # Executes command as the logged in user instead ot root
@@ -483,6 +497,18 @@ set_opts () {
   fi
 }
 
+get_opts () {
+  if [ -z $site ]
+  then
+    echo "Global config file: $conf_dir/damp.conf"
+    cat "$conf_dir/damp.conf"
+  else
+    load_site $site
+    echo "$name config file: $conf_dir/sites/${name}.conf"
+    cat "$conf_dir/sites/${name}.conf"
+  fi
+}
+
 # Install and configure packages for the DAMP stack
 setup_stack () {
   detect_os
@@ -490,9 +516,15 @@ setup_stack () {
     "Red Hat"|CentOS)
       yum install httpd mysql mysql-server php-cli php-pear php-xml php-mysql php-mbstring php-pdo php-gd php-devel
       yum groupinstall "Development Tools"
+      if [ ! -z $mail ]; then
+        yum install postfix
+      fi
       ;;
     Ubuntu|Debian)
       apt-get install apache2 mysql-server mysql-client php5 php5-cli php5-mysql php5-xmlrpc php-pear php5-gd php5-dev build-essential
+      if [ ! -z $mail ]; then
+        apt-get install postfix
+      fi
       a2enmod rewrite
       ;;
   esac
@@ -503,6 +535,7 @@ setup_stack () {
   echo "extension=uploadprogress.so" >> "$phpconf"
   echo "ServerName localhost" >> "$httpdconf"
   damp_services restart
+  as_user "touch \"${conf_dir}/setup-run\""
 }
 
 # Edit service configuration files in the terminal
@@ -514,15 +547,12 @@ edit_conf () {
     case "$1" in
       php)
         vi $phpconf
-        break
         ;;
       httpd|apache)
         vi $httpdconf
-        break
         ;;
       db|database|mysql)
         vi $dbconf
-        break
         ;;
       *)
         error_exit "unrecognized component"
@@ -543,6 +573,9 @@ fix_perm () {
 ########################################
 ##       Script execution start       ##
 ########################################
+
+# Do we have all the commands we need?
+check_commands
 
 # Make sure we are running as root
 if [ $(id -u) -ne 0 ]
@@ -716,47 +749,40 @@ site="$2"
 case "$operation" in
   list|info|ls)
     site_info
-    exit 0
     ;;
   new)
     new_site
-    exit 0
     ;;
   open)
     requires_site
     open_site $site
-    exit 0
     ;;
   install)
     requires_site
     open_site $site "/install.php"
-    exit 0
     ;;
   remove|delete|rm|del)
     requires_site
     remove_site
-    exit 0
     ;;
   set|update)
     set_opts
-    exit 0
+    ;;
+  get)
+    get_opts
     ;;
   start|stop|restart|status)
     damp_services $operation
-    exit 0
     ;;
   setup)
     setup_stack
-    exit 0
     ;;
   conf|configure)
     edit_conf $site
-    exit 0
     ;;
   fix|fixperms|fixperm)
     requires_site
     fix_perm
-    exit 0
     ;;
   *)
     echo "${progname}: operation not recognized - try $0 --help" 1>&2
