@@ -575,7 +575,6 @@ remove_site () {
     rm -f "$httpdvhost/${fqdn}.conf"
     hosts_entry delete "$fqdn"
     manage_database delete
-    damp_services restart
   else
     exit 0
   fi
@@ -684,6 +683,31 @@ setup_stack () {
   chmod 644 "${conf_dir}/setup-run"
 }
 
+# Uninstallation function for script and configuration files
+function uninstall_script () {
+  if [ -z $yes_to_all ]; then
+    echo "You are about to remove DAMP from your system. This will delete all"
+    echo "site/script data, but will not remove any installed packages."
+    echo -n "Are you sure you want to uninstall ${progname} [y|n]: "
+    read sure
+  else
+    sure="y"
+  fi
+  if [ "${sure}" == "y" ] || [ "${sure}" == "Y" ]
+  then
+    while read line
+    do
+      site=$line
+      remove_site
+    done <<< "$(list_sites)"
+    damp_services restart
+    rm -Rf "$conf_dir"
+    rm -f /usr/local/bin/damp > /dev/null 2>&1
+  else
+    exit 0
+  fi
+}
+
 # Edit service configuration files in the terminal
 edit_conf () {
   if [ -z $1 ]
@@ -765,7 +789,7 @@ fi
 parse_conf "$conf_dir/damp.conf"
 
 # Execute getopt to parse arguments
-ARGS=$(getopt -o hvn:d:miup:b:y -l help,version,name:,domain:,path:,docroot:,db:,database:,mail,install,drush,phpconf:,httpdconf:,httpdvhost:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath:,language:,yes -n "$progname" -- "$@");
+ARGS=$(getopt -o hvn:d:miup:b:y -l help,version,name:,domain:,path:,docroot:,db:,database:,mail,install,uninstall,drush,phpconf:,httpdconf:,httpdvhost:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath:,language:,yes -n "$progname" -- "$@");
 
 # Bad arguments
 if [ $? -ne 0 ];
@@ -824,6 +848,10 @@ while true; do
     -i|--install)
       shift;
       install="install"
+      ;;
+    --uninstall)
+      shift;
+      uninstall="remove"
       ;;
     -u|--drush)
       shift;
@@ -929,6 +957,7 @@ case "$operation" in
   remove|delete|rm|del)
     requires_site
     remove_site
+    damp_services restart
     ;;
   set|update)
     set_opts
@@ -940,7 +969,12 @@ case "$operation" in
     damp_services $operation
     ;;
   setup)
-    setup_stack
+    if [ -z $uninstall ]
+    then
+      setup_stack
+    else
+      uninstall_script
+    fi
     ;;
   conf|configure)
     edit_conf $site
