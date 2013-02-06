@@ -1,5 +1,28 @@
 #!/bin/bash
 
+################################################################################
+# DAMP bash script
+# Manage local DAMP (Drupal, Apache, MySQL, PHP) environment and sites.
+#
+# Tested on the following distributions:
+# - Linux Mint 14 Nadia (Cinnamon 32/64bit)
+# - Linux Mint 14 Nadia (MATE 32/64bit)
+#
+# Usage:
+# 1) Make script file executable. (chmod a+x damp)
+# 2) For detailed usage information, execute ./damp --help
+#
+# LICENSE: This file is open source software (OSS) licensed under the GPLv2 and
+#          may be copied under certain conditions. See the links below for
+#          details.
+#
+# Author:          Corey Hinshaw <coreyhinshaw@gmail.com>
+# Homepage:        https://github.com/electrickite/damp
+# License:         GPLv2 (http://www.gnu.org/licenses/gpl2.html)
+# Version:         0.2.0
+################################################################################
+
+
 ########################################
 ##          Global variables          ##
 ########################################
@@ -8,7 +31,7 @@
 #conf_dir="$HOME/.local/share/damp"
 
 progname="damp"
-prog_version="0.1.0"
+prog_version="0.2.0"
 global_opts="phpconf httpdconf httpdvhost httpdport dbconf rootdbuser dbport initpath lang"
 global_pass_opts="rootdbpass"
 site_opts="name domain docroot database dbuser"
@@ -31,7 +54,6 @@ Commands:
   info                     view details about a particular site
   new                      create a new site
   open                     open a site in a web browser
-  install                  open the web-based site installer
   remove, rm, delete       delete a site
   set                      set site/global options
   get                      show site/global cofiguration files
@@ -43,32 +65,43 @@ Commands:
   configure, conf          edit configuration files  
   fixperms, fix            fix site directory permissions  
 
-Site Options:
-  -b, --database, --db     database name
+Options:
+  -b, --database, --db     database name, defaults to site name
   -d, --domain             domain name (ie. example.com)
   -n, --name               site shortname (must be unique)
   -p, --docroot, --path    full path to the Drupal installation
+  -M, --make               path to dush make file, will be built at docroot
 
-Shared Options:
   --dbuser                 database user name, either site user or root account 
-  --dbpass                 the database user password                  
-
-Global Options:
+  --dbpass                 the database user password    
+              
   --dbconf                 mysql configuration file path
   --dbport                 mysql port number
-  -h, --help               display this help and exit
   --httpdconf              apache configuration file path
   --httpdport              apache port number
   --httpdvhost             apache vhost configuration file directory
   --initpath               path to service init scripts
+  --phpconf                php configuration file path
+
+  -h, --help               display this help and exit
+  -i, --install            install script to path or open site install page
+                           used with setup or open
   --language               language to use during site installs
   -m, --mail               install system MTA, only used during setup
-  --phpconf                php configuration file path
+  --passwords              force display passwords in option lists
+  -u, --drush              install drush (the DRUpal SHell)
+  --uninstall              uninstall script, configuration, and sites
+                           used wuth setup
   -v, --version            output version information and exit
   -y, --yes                answer yes to all prompts
 
-With no SITE is specified, operatons have global scope is applicable. Script
-must be run as root.
+With no SITE is specified, operatons have global scope if applicable. Note that
+certain commands must be run as root.
+
+This script is designed for use in local Drupal development. It is not intended
+for production applications. Security and permissions are deliberately relaxed.
+It is highly recommended that a host-based firewall be enabled while DAMP is in
+use.
 
 Examples:
   damp list
@@ -98,6 +131,7 @@ requires_root () {
   fi
 }
 
+# Show the script version and stack components
 show_version () {
   detect_os
   case "$os" in
@@ -386,7 +420,7 @@ manage_database () {
 # default.settings.php file
 check_docroot () {
   if [ ! -f "${docroot}/sites/default/default.settings.php" ]; then
-    error_exit "could not find default.settings.php"
+    error_exit "could not verify Drupal document root"
   fi
 }
 
@@ -416,7 +450,7 @@ alter_site () {
     fi
   done
 
-  # load existing site options
+  # Load existing site options
   load_site $site
 
   # Copy existing options to set of 'old' variables
@@ -723,7 +757,7 @@ setup_stack () {
 
   # Install the script to system directories
   if [ ! -z $install ]; then
-    cp "$0" /usr/local/bin
+    cp -f "$0" /usr/local/bin
     if [ $? -ne 0 ]; then
       error_exit "could not copy script to /usr/local/bin"
     fi
