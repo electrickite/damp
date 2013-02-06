@@ -394,24 +394,25 @@ hosts_entry () {
 
 # Perform MySQL database operations
 manage_database () {
+  db_error=0
   case "$1" in
     create)
-      mysql -u $rootdbuser --password=$rootdbpass --execute="CREATE DATABASE ${database};"
-      mysql -u $rootdbuser --password=$rootdbpass --execute="GRANT ALL PRIVILEGES ON ${database}.* TO ${dbuser}@localhost IDENTIFIED BY '${dbpass}';"
+      mysql -u $rootdbuser --password=$rootdbpass --execute="CREATE DATABASE ${database};"; [ $? -ne 0 ] && db_error=1
+      mysql -u $rootdbuser --password=$rootdbpass --execute="GRANT ALL PRIVILEGES ON ${database}.* TO ${dbuser}@localhost IDENTIFIED BY '${dbpass}';"; [ $? -ne 0 ] && db_error=1
       ;;
     delete)
-      mysql -u $rootdbuser --password=$rootdbpass --execute="DROP USER ${dbuser}@localhost;"
-      mysql -u $rootdbuser --password=$rootdbpass --execute="DROP DATABASE ${database};"
+      mysql -u $rootdbuser --password=$rootdbpass --execute="DROP USER ${dbuser}@localhost;"; [ $? -ne 0 ] && db_error=1
+      mysql -u $rootdbuser --password=$rootdbpass --execute="DROP DATABASE ${database};"; [ $? -ne 0 ] && db_error=1
       ;;
     userdel)
-      mysql -u $rootdbuser --password=$rootdbpass --execute="DROP USER ${2}@localhost;"
+      mysql -u $rootdbuser --password=$rootdbpass --execute="DROP USER ${2}@localhost;"; [ $? -ne 0 ] && db_error=1
       ;;
     useradd)
-      mysql -u $rootdbuser --password=$rootdbpass --execute="GRANT ALL PRIVILEGES ON ${database}.* TO ${2}@localhost IDENTIFIED BY '${3}';"
+      mysql -u $rootdbuser --password=$rootdbpass --execute="GRANT ALL PRIVILEGES ON ${database}.* TO ${2}@localhost IDENTIFIED BY '${3}';"; [ $? -ne 0 ] && db_error=1
       ;;
   esac
-  mysql -u $rootdbuser --password=$rootdbpass --execute="flush privileges;"
-  if [ $? -ne 0 ]; then
+  mysql -u $rootdbuser --password=$rootdbpass --execute="flush privileges;"; [ $? -ne 0 ] && db_error=1
+  if [ $db_error -ne 0 ]; then
     error_exit "error performing database operation"
   fi
 }
@@ -752,8 +753,14 @@ setup_stack () {
     pear install drush/drush
   fi
   pecl install uploadprogress
-  echo "extension=uploadprogress.so" >> "$phpconf"
-  echo "ServerName localhost" >> "$httpdconf"
+  grep "extension=uploadprogress.so" "$phpconf" > /dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    echo "extension=uploadprogress.so" >> "$phpconf"
+  fi
+  grep "ServerName localhost" "$httpdconf" > /dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    echo "ServerName localhost" >> "$httpdconf"
+  fi
 
   # Install the script to system directories
   if [ ! -z $install ]; then
