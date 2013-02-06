@@ -66,14 +66,16 @@ Commands:
   fixperms, fix            fix site directory permissions  
 
 Options:
+  -a, --dbadmin            install or open web-based database administration
+                           front end
   -b, --database, --db     database name, defaults to site name
   -d, --domain             domain name (ie. example.com)
   -n, --name               site shortname (must be unique)
   -p, --docroot, --path    full path to the Drupal installation
   -M, --make               path to dush make file, will be built at docroot
 
-  --dbuser                 database user name, either site user or root account 
-  --dbpass                 the database user password    
+  --dbuser                 database user name, either site user or root account
+  --dbpass                 the database user password
               
   --dbconf                 mysql configuration file path
   --dbport                 mysql port number
