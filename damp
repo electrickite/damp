@@ -36,7 +36,7 @@ global_opts="phpconf httpdconf httpdconfdir httpdvhost httpdport dbconf rootdbus
 global_pass_opts="rootdbpass"
 site_opts="name domain docroot database dbuser"
 site_pass_opts="dbpass"
-commands="command echo if while for break case exit su who awk cat grep cp mv ls chmod sed mysql eval xdg-open read tr head rm find xargs id mkdir getopt set shift"
+commands="command echo if while for break case exit su who awk cat grep cp mv ls chmod sed eval xdg-open read tr head rm find xargs id mkdir getopt set shift getent cut"
 
 
 ########################################
@@ -129,7 +129,7 @@ error_exit () {
 requires_root () {
   if [ $(id -u) -ne 0 ]
   then
-    error_exit "$operation must be run as root"
+    error_exit "'$operation' must be run as root"
   fi
 }
 
@@ -747,32 +747,46 @@ get_opts () {
 
 # Install and configure packages for the DAMP stack
 setup_stack () {
+  # Install system-specific packages
   detect_os
   case "$os" in
     "Red Hat"|CentOS)
       yum -y install httpd mysql mysql-server php-cli php-pear php-xml php-mysql php-mbstring php-pdo php-gd php-devel wget git
-      yum groupinstall "Development Tools"
+      yum -y groupinstall "Development Tools"
       if [ ! -z $mail ]; then
-        yum install postfix
+        yum -y install postfix
       fi
       ;;
     Ubuntu|Debian)
       apt-get -y install apache2 mysql-server mysql-client php5 php5-cli php5-mysql php5-xmlrpc php-pear php5-gd php5-dev wget git build-essential
       if [ ! -z $mail ]; then
-        apt-get install postfix
+        apt-get -y install postfix
       fi
       a2enmod rewrite
       ;;
   esac
+
+  # Install Drush
   if [ ! -z $drush ]; then
     pear channel-discover pear.drush.org
     pear install drush/drush
+    drush help > /dev/null 2>&1
   fi
+
+  # Enable SELinux httpd contexts in home directories
+  command -v setsebool > /dev/null 2>&1
+  if [ $? -eq 0 ]; then
+    setsebool -P httpd_enable_homedirs true
+  fi
+
+  # Install the php uploadprogress module
   pecl install uploadprogress
   grep "extension=uploadprogress.so" "$phpconf" > /dev/null 2>&1
   if [ $? -ne 0 ]; then
     echo "extension=uploadprogress.so" >> "$phpconf"
   fi
+
+  # Prevent errors related to Apache server name
   grep "ServerName localhost" "$httpdconf" > /dev/null 2>&1
   if [ $? -ne 0 ]; then
     echo "ServerName localhost" >> "$httpdconf"
@@ -780,11 +794,11 @@ setup_stack () {
 
   # Install the script to system directories
   if [ ! -z $install ]; then
-    cp -f "$0" /usr/local/bin
+    cp -f "$0" /usr/bin
     if [ $? -ne 0 ]; then
-      error_exit "could not copy script to /usr/local/bin"
+      error_exit "could not copy script to /usr/bin"
     fi
-    chmod 755 /usr/local/bin/damp
+    chmod 755 /usr/bin/damp
     old_conf_dir="$conf_dir"
     conf_dir="/etc/damp"
     conf_user="root"
@@ -885,7 +899,7 @@ function uninstall_script () {
     fi
     damp_services restart
     rm -Rf "$conf_dir"
-    rm -f /usr/local/bin/damp > /dev/null 2>&1
+    rm -f /usr/bin/damp > /dev/null 2>&1
   else
     exit 0
   fi
@@ -928,17 +942,23 @@ fix_perm () {
 ########################################
 
 # What configuration directory are we using?
+if [ -z $SUDO_USER ]
+then
+  user_home="$HOME"
+else
+  user_home="$(getent passwd $SUDO_USER | cut -d: -f6)"
+fi
 if [ -z $conf_dir ]
 then
-  if [ -f "$HOME/.local/share/damp/damp.conf" ]
+  if [ -f "$user_home/.local/share/damp/damp.conf" ]
   then
-    conf_dir="$HOME/.local/share/damp"
+    conf_dir="$user_home/.local/share/damp"
   elif [ -d "/etc/damp" ]
   then
     conf_dir="/etc/damp"
     conf_user="root"
   else
-    conf_dir="$HOME/.local/share/damp"
+    conf_dir="$user_home/.local/share/damp"
   fi
 fi
 
