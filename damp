@@ -786,6 +786,7 @@ setup_stack () {
   damp_services restart
   as_user "touch \"${conf_dir}/setup-run\"" $conf_user
   chmod 644 "${conf_dir}/setup-run"
+  echo "$progname: remember to set the root MySQL password using; $progname set --dbpass mypass"
 }
 
 # Uninstallation function for script and configuration files
