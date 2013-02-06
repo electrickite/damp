@@ -32,7 +32,7 @@
 
 progname="damp"
 prog_version="0.2.0"
-global_opts="phpconf httpdconf httpdvhost httpdport dbconf rootdbuser dbport initpath lang"
+global_opts="phpconf httpdconf httpdconfdir httpdvhost httpdport dbconf rootdbuser dbport initpath lang dbadminconf"
 global_pass_opts="rootdbpass"
 site_opts="name domain docroot database dbuser"
 site_pass_opts="dbpass"
@@ -211,6 +211,7 @@ generate_global_conf () {
       as_user "cat > \"$conf_dir/damp.conf\" <<EOF
 phpconf=/etc/php.ini
 httpdconf=/etc/httpd/conf/httpd.conf
+httpdconfdir=/etc/httpd/conf.d
 httpdvhost=/etc/httpd/conf.d
 httpdport=80
 dbconf=/etc/my.cnf
@@ -218,12 +219,14 @@ rootdbuser=root
 dbport=3306
 initpath=/etc/init.d
 lang=en
+dbadminconf=/etc/phpmyadmin/config.inc.php
 EOF" $conf_user
       ;;
     *|Ubuntu|Debian)
       as_user "cat > \"$conf_dir/damp.conf\" <<EOF
-phpconf=/etc/php5/apache2/php.ini
+phpconf=/etc/php5/apache2/php.inisudp 
 httpdconf=/etc/apache2/apache2.conf
+httpdconfdir=/etc/apache2/conf.d
 httpdvhost=/etc/apache2/sites-enabled
 httpdport=80
 dbconf=/etc/mysql/my.cnf
@@ -231,6 +234,7 @@ rootdbuser=root
 dbport=3306
 initpath=/etc/init.d
 lang=en
+dbadminconf=/etc/phpmyadmin/config.inc.php
 EOF" $conf_user
       ;;
   esac
@@ -566,6 +570,14 @@ site_info () {
   fi
 }
 
+# Opens an arbitrary URL in a web browser
+open_url () {
+  as_user "xdg-open "$1" > /dev/null 2>&1"
+  if [ $? -ne 0 ]; then
+    error_exit "could not open browser. URL is $1"
+  fi
+}
+
 # Open a site in a web browser
 open_site () {
   load_site $1
@@ -573,11 +585,7 @@ open_site () {
   if [ ! -z $install ]; then
     option_path="/install.php"
   fi
-  url="http://${fqdn}:${httpdport}${option_path}${2}"
-  as_user "xdg-open $url > /dev/null 2>&1"
-  if [ $? -ne 0 ]; then
-    error_exit "could not open browser. URL is $url"
-  fi
+  open_url "http://${fqdn}:${httpdport}${option_path}${2}"
 }
 
 # Create a new site
@@ -589,7 +597,7 @@ new_site () {
     if [ -z ${!i} ]
     then
       echo -n "Enter site ${i}: "
-      read $i
+      read -e $i
       if [ -z ${!i} ] && [ $i != "domain" ]; then
         error_exit "$i is a required option"
       fi
@@ -699,11 +707,17 @@ set_opts () {
     if [ $i == "httpdport" ]; then
       update_port
     fi
+    if [ $i == "rootdbuser" ]; then
+      configure_dbadmin
+    fi
   done
   for i in $passopts; do
     sed -i "s|${i}=.*|${i}=${!i}|" "$passfile"
     if [ $? -ne 0 ]; then
       error_exit "error writing to the password file"
+    fi
+    if [ $i == "rootdbpass" ]; then
+      configure_dbadmin
     fi
   done
   if [ ! -z $alter_error ]; then
@@ -734,14 +748,14 @@ setup_stack () {
   detect_os
   case "$os" in
     "Red Hat"|CentOS)
-      yum install httpd mysql mysql-server php-cli php-pear php-xml php-mysql php-mbstring php-pdo php-gd php-devel wget git
+      yum -y install httpd mysql mysql-server php-cli php-pear php-xml php-mysql php-mbstring php-pdo php-gd php-devel wget git
       yum groupinstall "Development Tools"
       if [ ! -z $mail ]; then
         yum install postfix
       fi
       ;;
     Ubuntu|Debian)
-      apt-get install apache2 mysql-server mysql-client php5 php5-cli php5-mysql php5-xmlrpc php-pear php5-gd php5-dev wget git build-essential
+      apt-get -y install apache2 mysql-server mysql-client php5 php5-cli php5-mysql php5-xmlrpc php-pear php5-gd php5-dev wget git build-essential
       if [ ! -z $mail ]; then
         apt-get install postfix
       fi
@@ -794,6 +808,57 @@ setup_stack () {
   as_user "touch \"${conf_dir}/setup-run\"" $conf_user
   chmod 644 "${conf_dir}/setup-run"
   echo "$progname: remember to set the root MySQL password using; $progname set --dbpass mypass"
+}
+
+# Configures database administration script
+configure_dbadmin () {
+  if [ -f "$dbadminconf" ]
+  then
+    grep "/* DAMP configuration - DO NOT REMOVE THIS LINE */" "$dbadminconf" > /dev/null 2>&1
+    if [ $? -ne 0 ]
+    then
+      echo "/* DAMP configuration - DO NOT REMOVE THIS LINE */" >> "$dbadminconf"
+      echo "\$cfg['Servers'][\$i]['auth_type'] = 'config';" >> "$dbadminconf"
+      echo "\$cfg['Servers'][\$i]['user'] = '${rootdbuser}';" >> "$dbadminconf"
+      echo "\$cfg['Servers'][\$i]['password'] = '${rootdbpass}';" >> "$dbadminconf"
+      echo "\$cfg['Servers'][\$i]['nopassword'] = TRUE;" >> "$dbadminconf"
+      echo "\$cfg['DefaultLang'] = 'en-utf-8';" >> "$dbadminconf"
+      echo "\$cfg['ServerDefault'] = 2;" >> "$dbadminconf"
+    else
+      sed -i "s/['user'] = '.*'/['user'] = '${rootdbuser}'/g" "$dbadminconf"
+      sed -i "s/['password'] = '.*'/['passowrd'] = '${rootdbpass}'/g" "$dbadminconf"
+    fi
+  fi
+}
+
+# Installs the database management script
+setup_dbadmin () {
+  if [ ! -f "${conf_dir}/setup-run" ]; then
+    error_exit "you must run setup before you install database administration utilities"
+  fi
+  detect_os
+  case "$os" in
+    "Red Hat"|CentOS)
+      yum -y install phpmyadmin
+      ;;
+    Ubuntu|Debian)
+      apt-get -y install phpmyadmin
+      ;;
+  esac
+  if [ $? -ne 0 ]; then
+    error_exit "could not install database administration packages"
+  fi
+  configure_dbadmin
+  if [ -f "$httpdconfdir/phpmyadmin.conf" ]; then
+    grep "###  DAMP configuration - DO NOT REMOVE THIS LINE ###" "$httpdconfdir/phpmyadmin.conf" > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+      directory_text1="<Directory /usr/share/phpmyadmin>\nOrder Deny,Allow\nDeny from all\nAllow from 127.0.0.1"
+      directory_text2="<Directory /usr/share/phpmyadmin/setup>\nOrder Deny,Allow\nDeny from all\nAllow from 127.0.0.1"
+      sed -i "s|<Directory /usr/share/phpmyadmin>|${directory_text1}|g" "$httpdconfdir/phpmyadmin.conf"
+      sed -i "s|<Directory /usr/share/phpmyadmin/setup>|${directory_text2}|g" "$httpdconfdir/phpmyadmin.conf"
+      echo "###  DAMP script configuration complete - DO NOT REMOVE THIS LINE ###" >> "$httpdconfdir/phpmyadmin.conf"
+    fi
+  fi
 }
 
 # Uninstallation function for script and configuration files
@@ -902,7 +967,7 @@ if [ -r "$conf_dir/damp.pass" ]; then
 fi
 
 # Execute getopt to parse arguments
-ARGS=$(getopt -o hvn:d:miuM:p:b:y -l help,version,name:,domain:,path:,docroot:,db:,database:,mail,install,uninstall,drush,make:,phpconf:,httpdconf:,httpdvhost:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath:,language:,yes,passwords -n "$progname" -- "$@");
+ARGS=$(getopt -o hvn:d:miuaM:p:b:y -l help,version,name:,domain:,path:,docroot:,db:,database:,mail,install,uninstall,drush,dbadmin,make:,phpconf:,httpdconf:,httpdvhost:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath:,language:,yes,passwords -n "$progname" -- "$@");
 
 # Bad arguments
 if [ $? -ne 0 ];
@@ -969,6 +1034,10 @@ while true; do
     -u|--drush)
       shift;
       drush="drush"
+      ;;
+    -a|--dbadmin)
+      shift;
+      dbadmin="dbadmin"
       ;;
     -M|--make)
       shift;
@@ -1077,8 +1146,13 @@ case "$operation" in
     new_site
     ;;
   open)
-    requires_site
-    open_site $site
+    if [ -z $dbadmin ]
+    then
+      requires_site
+      open_site $site
+    else
+      open_url "http://localhost:${httpdport}/phpmyadmin"
+    fi
     ;;
   remove|delete|rm|del)
     requires_root
@@ -1099,11 +1173,12 @@ case "$operation" in
     ;;
   setup)
     requires_root
-    if [ -z $uninstall ]
-    then
-      setup_stack
-    else
+    if [ ! -z $uninstall ]; then
       uninstall_script
+    elif [ ! -z $dbadmin ]; then
+      setup_dbadmin
+    else
+      setup_stack
     fi
     ;;
   conf|configure)
