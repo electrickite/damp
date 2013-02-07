@@ -90,6 +90,7 @@ Options:
   --language               language to use during site installs
   -m, --mail               install system MTA, only used during setup
   --passwords              force display passwords in option lists
+  -s, --skip               skip SELinux configuration during setup
   -u, --drush              install drush (the DRUpal SHell)
   --uninstall              uninstall script, configuration, and sites
                            used wuth setup
@@ -219,7 +220,7 @@ rootdbuser=root
 dbport=3306
 initpath=/etc/init.d
 lang=en
-dbadminconf=/etc/phpmyadmin/config.inc.php
+dbadminconf=/etc/phpMyAdmin/config.inc.php
 EOF" $conf_user
       ;;
     *|Ubuntu|Debian)
@@ -793,7 +794,7 @@ setup_stack () {
 
   # Enable SELinux httpd contexts in home directories
   command -v setsebool > /dev/null 2>&1
-  if [ $? -eq 0 ]; then
+  if [ $? -eq 0 ] && [ -z $skip_selinux ]; then
     echo "Setting SELinux values. This may take some time..."
     setsebool -P allow_httpd_anon_write 1; echo -n "*"
     setsebool -P httpd_builtin_scripting 1; echo -n "*"
@@ -857,9 +858,14 @@ setup_stack () {
 configure_dbadmin () {
   if [ -f "$dbadminconf" ]
   then
-    grep "/* DAMP configuration - DO NOT REMOVE THIS LINE */" "$dbadminconf" > /dev/null 2>&1
+    grep "?>" "$dbadminconf" > /dev/null 2>&1
+    if [ $? -eq 0 ]; then
+      found_closing_tag=1
+    fi
+    grep "DAMP configuration - DO NOT REMOVE THIS LINE" "$dbadminconf" > /dev/null 2>&1
     if [ $? -ne 0 ]
     then
+      [ ! -z $found_closing_tag ] && echo "<?php" >> "$dbadminconf"
       echo "/* DAMP configuration - DO NOT REMOVE THIS LINE */" >> "$dbadminconf"
       echo "\$cfg['Servers'][\$i]['auth_type'] = 'config';" >> "$dbadminconf"
       echo "\$cfg['Servers'][\$i]['user'] = '${rootdbuser}';" >> "$dbadminconf"
@@ -867,6 +873,7 @@ configure_dbadmin () {
       echo "\$cfg['Servers'][\$i]['nopassword'] = TRUE;" >> "$dbadminconf"
       echo "\$cfg['DefaultLang'] = 'en-utf-8';" >> "$dbadminconf"
       echo "\$cfg['ServerDefault'] = 2;" >> "$dbadminconf"
+      [ ! -z $found_closing_tag ] && echo "?>" >> "$dbadminconf"
     else
       sed -i "s/['user'] = '.*'/['user'] = '${rootdbuser}'/g" "$dbadminconf"
       sed -i "s/['password'] = '.*'/['passowrd'] = '${rootdbpass}'/g" "$dbadminconf"
@@ -882,25 +889,61 @@ setup_dbadmin () {
   detect_os
   case "$os" in
     "Red Hat"|CentOS)
+      cat <<EOM >/etc/yum.repos.d/epel-bootstrap.repo
+[epel]
+name=Bootstrap EPEL
+mirrorlist=http://mirrors.fedoraproject.org/mirrorlist?repo=epel-\$releasever&arch=\$basearch
+failovermethod=priority
+enabled=0
+gpgcheck=0
+EOM
+      yum --enablerepo=epel -y install epel-release
+      rm -f /etc/yum.repos.d/epel-bootstrap.repo
       yum -y install phpmyadmin
+      if [ $? -ne 0 ]; then
+        error_exit "could not install database administration packages"
+      fi
+      sed -i "s/\['auth_type'\] *= *'.*'/\['auth_type'\] = 'config'/g" "$dbadminconf"
+      sed -i "s/\['user'\] *= *'.*'/\['user'\] = '${rootdbuser}'/g" "$dbadminconf"
+      sed -i "s/\['password'\] *= *'.*'/\['password'\] = '${rootdbpass}'/g" "$dbadminconf"
+      sed -i "s/\['AllowNoPassword'\]/\['DAMPDELETEME'\]/g" "$dbadminconf"
+      sed -ie "/DAMPDELETEME/i\$cfg['Servers'][\$i]['AllowNoPassword'] = TRUE;" "$dbadminconf"
+      sed -i '/DAMPDELETEME/,+1d' "$dbadminconf"
       ;;
     Ubuntu|Debian)
       apt-get -y install phpmyadmin
+      if [ $? -ne 0 ]; then
+        error_exit "could not install database administration packages"
+      fi
+      if [ -f "$httpdconfdir/phpmyadmin.conf" ]; then
+        grep "###  DAMP configuration - DO NOT REMOVE THIS LINE ###" "$httpdconfdir/phpmyadmin.conf" > /dev/null 2>&1
+        if [ $? -ne 0 ]; then
+          directory_text1="<Directory /usr/share/phpmyadmin>\nOrder Deny,Allow\nDeny from all\nAllow from 127.0.0.1"
+          directory_text2="<Directory /usr/share/phpmyadmin/setup>\nOrder Deny,Allow\nDeny from all\nAllow from 127.0.0.1"
+          sed -i "s|<Directory /usr/share/phpmyadmin>|${directory_text1}|g" "$httpdconfdir/phpmyadmin.conf"
+          sed -i "s|<Directory /usr/share/phpmyadmin/setup>|${directory_text2}|g" "$httpdconfdir/phpmyadmin.conf"
+          echo "###  DAMP script configuration complete - DO NOT REMOVE THIS LINE ###" >> "$httpdconfdir/phpmyadmin.conf"
+        fi
+        grep "DAMP configuration - DO NOT REMOVE THIS LINE" "$dbadminconf" > /dev/null 2>&1
+        if [ $? -ne 0 ]
+        then
+          echo "/* DAMP configuration - DO NOT REMOVE THIS LINE */" >> "$dbadminconf"
+          echo "\$cfg['Servers'][\$i]['auth_type'] = 'config';" >> "$dbadminconf"
+          echo "\$cfg['Servers'][\$i]['user'] = '${rootdbuser}';" >> "$dbadminconf"
+          echo "\$cfg['Servers'][\$i]['password'] = '${rootdbpass}';" >> "$dbadminconf"
+          echo "\$cfg['Servers'][\$i]['nopassword'] = TRUE;" >> "$dbadminconf"
+          echo "\$cfg['DefaultLang'] = 'en-utf-8';" >> "$dbadminconf"
+          echo "\$cfg['ServerDefault'] = 2;" >> "$dbadminconf"
+        else
+          sed -i "s/['user'] *= *'.*'/['user'] = '${rootdbuser}'/g" "$dbadminconf"
+          sed -i "s/['password'] *= *'.*'/['password'] = '${rootdbpass}'/g" "$dbadminconf"
+        fi
+      fi
       ;;
   esac
-  if [ $? -ne 0 ]; then
-    error_exit "could not install database administration packages"
-  fi
-  configure_dbadmin
-  if [ -f "$httpdconfdir/phpmyadmin.conf" ]; then
-    grep "###  DAMP configuration - DO NOT REMOVE THIS LINE ###" "$httpdconfdir/phpmyadmin.conf" > /dev/null 2>&1
-    if [ $? -ne 0 ]; then
-      directory_text1="<Directory /usr/share/phpmyadmin>\nOrder Deny,Allow\nDeny from all\nAllow from 127.0.0.1"
-      directory_text2="<Directory /usr/share/phpmyadmin/setup>\nOrder Deny,Allow\nDeny from all\nAllow from 127.0.0.1"
-      sed -i "s|<Directory /usr/share/phpmyadmin>|${directory_text1}|g" "$httpdconfdir/phpmyadmin.conf"
-      sed -i "s|<Directory /usr/share/phpmyadmin/setup>|${directory_text2}|g" "$httpdconfdir/phpmyadmin.conf"
-      echo "###  DAMP script configuration complete - DO NOT REMOVE THIS LINE ###" >> "$httpdconfdir/phpmyadmin.conf"
-    fi
+  damp_services restart
+  if [ ! -z $run_db_admin_setup ]; then
+    open_url "http://localhost:${httpdport}/phpmyadmin/setup"
   fi
 }
 
@@ -1031,7 +1074,7 @@ if [ -r "$conf_dir/damp.pass" ]; then
 fi
 
 # Execute getopt to parse arguments
-ARGS=$(getopt -o hvn:d:miuaM:p:b:y -l help,version,name:,domain:,path:,docroot:,db:,database:,mail,install,uninstall,drush,dbadmin,make:,phpconf:,httpdconf:,httpdvhost:,httpdport:,dbconf:,dbport:,dbuser:,dbpass:,initpath:,language:,yes,passwords -n "$progname" -- "$@");
+ARGS=$(getopt -o hvn:d:miuasM:p:b:y -l help,version,name:,domain:,path:,docroot:,db:,database:,mail,install,uninstall,drush,dbadmin,skip,make:,phpconf:,httpdconf:,httpdvhost:,httpdport:,dbconf:,dbadminconf:,dbport:,dbuser:,dbpass:,initpath:,language:,yes,passwords -n "$progname" -- "$@");
 
 # Bad arguments
 if [ $? -ne 0 ];
@@ -1103,6 +1146,10 @@ while true; do
       shift;
       dbadmin="dbadmin"
       ;;
+    -s|--skip)
+      shift;
+      skip_selinux="skip"
+      ;;
     -M|--make)
       shift;
       if [ -n "$1" ]; then
@@ -1151,6 +1198,13 @@ while true; do
       shift;
       if [ -n "$1" ]; then
         dbconf="$1"
+        shift;
+      fi
+      ;;
+    --dbadminconf)
+      shift;
+      if [ -n "$1" ]; then
+        dbadminconf="$1"
         shift;
       fi
       ;;
