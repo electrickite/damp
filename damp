@@ -127,9 +127,22 @@ error_exit () {
 
 # Make sure we are running as root
 requires_root () {
-  if [ $(id -u) -ne 0 ]
-  then
+  if [ $(id -u) -ne 0 ]; then
     error_exit "'$operation' must be run as root"
+  fi
+}
+
+# Verify we have access to all necessary shell commands. If a command is
+# specified as an argument, return zero if the command exists.
+check_command () {
+  if [ -z "$1" ]; then
+    for i in $commands; do
+      if ! command -v $i > /dev/null 2>&1; then
+        error_exit "required command $i not found"
+      fi
+    done
+  else
+    command -v "$1" > /dev/null 2>&1
   fi
 }
 
@@ -138,40 +151,28 @@ show_version () {
   detect_os
   case "$os" in
     Ubuntu|Debian)
-      apache_ver="apache2"
+      apache_ver="apachectl"
       ;;
     *|"Red Hat"|CentOS)
       apache_ver="httpd"
       ;;
   esac
-  command -v $apache_ver > /dev/null 2>&1
-  if [ $? -ne 0 ]; then
-    echo "apache not found"
-  else
+  if check_command $apache_ver; then
     eval "$apache_ver -v"
+  else
+    echo "apache not found"
   fi
   echo ""
   for i in mysql php; do
-    command -v $i > /dev/null 2>&1
-    if [ $? -ne 0 ]; then
-      echo "$i not found"
-    else
+    if check_command $i; then
       eval "$i --version"
+    else
+      echo "$i not found"
     fi
     echo ""
   done
   echo "DAMP script version $prog_version"
   echo "DAMP is under heavy development - expect frequent changes"
-}
-
-# Verify we have access to all necessary shell commands
-check_commands () {
-  for i in $commands; do
-    command -v $i > /dev/null 2>&1
-    if [ $? -ne 0 ]; then
-      error_exit "required command $i not found"
-    fi
-  done
 }
 
 # Executes command as the logged in user or the user specified in the second
@@ -631,8 +632,7 @@ new_site () {
   then
     build_fqdn
     if [ ! -z "$drush_make" ]; then
-      command -v drush > /dev/null 2>&1
-      if [ $? -eq 0 ]; then
+      if check_command drush; then
         as_user "drush make \"$drush_make\" \"$docroot\""
       else
         echo "$progname: drush does not seem to be installed"
@@ -666,8 +666,7 @@ new_site () {
     done
     hosts_entry add "$fqdn"
     add_search "$docroot"
-    command -v chcon > /dev/null 2>&1
-    if [ $? -eq 0 ]; then
+    if check_command chcon; then
       chcon -R --type=httpd_sys_content_t "${docroot}"
     fi
     damp_services restart
@@ -794,8 +793,7 @@ setup_stack () {
   fi
 
   # Enable SELinux httpd contexts in home directories
-  command -v setsebool > /dev/null 2>&1
-  if [ $? -eq 0 ] && [ -z $skip_selinux ]; then
+  if check_command setsebool && [ -z $skip_selinux ]; then
     echo "Setting SELinux values. This may take some time..."
     setsebool -P allow_httpd_anon_write 1; echo -n "*"
     setsebool -P httpd_builtin_scripting 1; echo -n "*"
@@ -1014,8 +1012,7 @@ fix_perm () {
       chmod 755 "${docroot}/sites/${fqdn}" >/dev/null 2>&1
       find "${docroot}/sites/${fqdn}/files" -type d -print0 | xargs -0 chmod o+rwx >/dev/null 2>&1
       find "${docroot}/sites/${fqdn}/files" -type f -print0 | xargs -0 chmod o+rw >/dev/null 2>&1
-      command -v chcon > /dev/null 2>&1
-      if [ $? -eq 0 ]; then
+      if check_command chcon; then
         chcon -R --type=httpd_sys_content_t "${docroot}"
       fi
     done <<< "$site_list"
@@ -1050,7 +1047,7 @@ fi
 
 # Do we have all the commands we need?
 if [ ! -f "${conf_dir}/setup-run" ]; then
-  check_commands
+  check_command
   echo "${progname}: Setup has not been run. Try ${0} setup"
 fi
 
