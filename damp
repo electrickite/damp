@@ -6,9 +6,10 @@
 #
 # Tested on the following distributions:
 # - Ubuntu 12.10 x86_64
+# - CentOS 6.3 x86_64
 #
 # Usage:
-# 1) Make script file executable. (chmod a+x damp)
+# 1) Make script file executable. (chmod u+x damp)
 # 2) For detailed usage information, execute ./damp --help
 #
 # LICENSE: This file is open source software (OSS) licensed under the GPLv2 and
