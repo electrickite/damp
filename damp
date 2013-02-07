@@ -5,8 +5,7 @@
 # Manage local DAMP (Drupal, Apache, MySQL, PHP) environment and sites.
 #
 # Tested on the following distributions:
-# - Linux Mint 14 Nadia (Cinnamon 32/64bit)
-# - Linux Mint 14 Nadia (MATE 32/64bit)
+# - Ubuntu 12.10 x86_64
 #
 # Usage:
 # 1) Make script file executable. (chmod a+x damp)
@@ -115,7 +114,6 @@ Examples:
 
 Report bugs at <https://github.com/electrickite/damp/issues>
 DAMP homepage: <https://github.com/electrickite/damp>
-
 EOF
 }
 
@@ -398,6 +396,21 @@ hosts_entry () {
   fi
 }
 
+# Add search permissions for all users to all diretories in a tree
+add_search () {
+  if [ -d "$1" ]
+  then
+    i="$1"
+    while [ "$i" != "/" ]; do
+      chmod a+x "$i"
+      if [ $? -ne 0 ]; then
+        error_exit "could not change permissions on $i"
+      fi
+      i="$(dirname $i)"
+    done
+  fi
+}
+
 # Perform MySQL database operations
 manage_database () {
   db_error=0
@@ -534,7 +547,7 @@ damp_services () {
       $initpath/apache2 $1; [ $? -ne 0 ] && service_error=1
       ;;
   esac
-  if [ $service_error -ne 0 ]; then
+  if [ $service_error -ne 0 ] && [ $1 != "status" ]; then
     error_exit "errors occurred while performing the requested operations"
   fi
 }
@@ -616,7 +629,7 @@ new_site () {
   then
     build_fqdn
     if [ ! -z "$drush_make" ]; then
-      command -v drush
+      command -v drush > /dev/null 2>&1
       if [ $? -eq 0 ]; then
         as_user "drush make \"$drush_make\" \"$docroot\""
       else
@@ -650,6 +663,11 @@ new_site () {
       fi
     done
     hosts_entry add "$fqdn"
+    add_search "$docroot"
+    command -v chcon > /dev/null 2>&1
+    if [ $? -eq 0 ]; then
+      chcon -R --type=httpd_sys_content_t "${docroot}"
+    fi
     damp_services restart
     open_site $name "/install.php"
   else
@@ -668,11 +686,11 @@ remove_site () {
   fi
   if [ "${sure}" == "y" ] || [ "${sure}" == "Y" ]
   then
+    manage_database delete
     rm -Rf "$conf_dir/sites/${site}"
     rm -Rf "$docroot/sites/$fqdn"
     rm -f "$httpdvhost/${fqdn}.conf"
     hosts_entry delete "$fqdn"
-    manage_database delete
   else
     exit 0
   fi
@@ -776,7 +794,16 @@ setup_stack () {
   # Enable SELinux httpd contexts in home directories
   command -v setsebool > /dev/null 2>&1
   if [ $? -eq 0 ]; then
-    setsebool -P httpd_enable_homedirs true
+    echo "Setting SELinux values. This may take some time..."
+    setsebool -P allow_httpd_anon_write 1; echo -n "*"
+    setsebool -P httpd_builtin_scripting 1; echo -n "*"
+    setsebool -P httpd_can_sendmail 1; echo -n "*"
+    setsebool -P httpd_enable_cgi 1; echo -n "*"
+    setsebool -P httpd_enable_homedirs 1; echo -n "*"
+    setsebool -P httpd_can_network_connect 1; echo -n "*"
+    setsebool -P httpd_can_network_connect_db 1; echo -n "*"
+    setsebool -P httpd_unified 1; echo -n "*"
+    echo "SELinux values configured successfully."
   fi
 
   # Install the php uploadprogress module
@@ -823,7 +850,7 @@ setup_stack () {
   damp_services restart
   as_user "touch \"${conf_dir}/setup-run\"" $conf_user
   chmod 644 "${conf_dir}/setup-run"
-  echo "$progname: remember to set the root MySQL password using; $progname set --dbpass mypass"
+  echo "$progname: remember to set the root MySQL password using: $progname set --dbpass mypass"
 }
 
 # Configures database administration script
@@ -930,10 +957,25 @@ edit_conf () {
 
 # Fix permission issues for the site file system
 fix_perm () {
-  load_site $site
-  chmod 755 "${docroot}/sites/${fqdn}" >/dev/null 2>&1
-  find "${docroot}/sites/${fqdn}/files" -type d -print0 | xargs -0 chmod o+rwx >/dev/null 2>&1
-  find "${docroot}/sites/${fqdn}/files" -type f -print0 | xargs -0 chmod o+rw >/dev/null 2>&1
+  if [ -z $1 ]; then
+    site_list=$(list_sites)
+  else
+    site_list=$1
+  fi
+  if [ ! -z "$site_list" ]
+  then
+    while read line
+    do
+      load_site $line
+      chmod 755 "${docroot}/sites/${fqdn}" >/dev/null 2>&1
+      find "${docroot}/sites/${fqdn}/files" -type d -print0 | xargs -0 chmod o+rwx >/dev/null 2>&1
+      find "${docroot}/sites/${fqdn}/files" -type f -print0 | xargs -0 chmod o+rw >/dev/null 2>&1
+      command -v chcon > /dev/null 2>&1
+      if [ $? -eq 0 ]; then
+        chcon -R --type=httpd_sys_content_t "${docroot}"
+      fi
+    done <<< "$site_list"
+  fi
 }
 
 
@@ -1209,8 +1251,7 @@ case "$operation" in
     ;;
   fix|fixperms|fixperm)
     requires_root
-    requires_site
-    fix_perm
+    fix_perm $site
     ;;
   *)
     echo "${progname}: command not recognized - try $0 --help" 1>&2
