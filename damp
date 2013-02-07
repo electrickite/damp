@@ -178,14 +178,12 @@ show_version () {
 # Executes command as the logged in user or the user specified in the second
 # argument
 as_user () {
-  if [ -z $2 ]
-  then
+  if [ -z $2 ]; then
     acting_user=$(who am i | awk '{print $1}')
   else
     acting_user=$2
   fi
-  if [ $acting_user == $(whoami) ]
-  then
+  if [ $acting_user == $(whoami) ]; then
     eval "$1"
   else
     su -c "$1" $acting_user
@@ -279,8 +277,7 @@ detect_os () {
 
 # Checks if a site has been specified
 requires_site () {
-  if [ -z $site ]
-  then
+  if [ -z $site ]; then
     error_exit "the requested operation requires a site"
   fi
 }
@@ -292,8 +289,7 @@ site_exists () {
 
 # Builds the FQDN for a site from the name and domain
 build_fqdn () {
-  if [ ! -z $domain ]
-    then
+  if [ ! -z $domain ]; then
       fqdn="${name}.${domain}"
     else
       fqdn="$name"
@@ -303,8 +299,7 @@ build_fqdn () {
 # Load site options into global variables
 load_site () {
   site_exists "$1"
-  if [ $? == 0 ]
-  then
+  if [ $? == 0 ]; then
     parse_conf "$conf_dir/sites/${1}/conf"
     if [ -r "$conf_dir/sites/${1}/pass" ]; then
       parse_conf "$conf_dir/sites/${1}/pass"
@@ -335,8 +330,7 @@ create_drupal_settings () {
     error_exit "could not write drupal site settings file."
   fi
   grep "db_url" "$docroot/sites/$fqdn/settings.php" > /dev/null 2>&1
-  if [ $? -ne 0 ]
-  then
+  if [ $? -ne 0 ]; then
     echo "
 \$databases['default']['default'] = array(
   'driver' => 'mysql',
@@ -401,8 +395,7 @@ hosts_entry () {
 
 # Add search permissions for all users to all diretories in a tree
 add_search () {
-  if [ -d "$1" ]
-  then
+  if [ -d "$1" ]; then
     i="$1"
     while [ "$i" != "/" ]; do
       chmod a+x "$i"
@@ -562,8 +555,7 @@ list_sites () {
 
 # Update Apache port settings for all sites
 update_port () {
-  if [ ! -z $(list_sites) ]
-  then
+  if [ ! -z $(list_sites) ]; then
     while read line
     do
       load_site $line
@@ -575,8 +567,7 @@ update_port () {
 
 # Print a site list if no site is specified, or detailed site information
 site_info () {
-  if [ -z $site ]
-  then
+  if [ -z $site ]; then
     # List all sites
     site_count=$(ls -1 "$conf_dir/sites" | wc -l)
     echo "Sites installed: $site_count"
@@ -612,8 +603,7 @@ new_site () {
     dbpass=$(< /dev/urandom tr -dc A-Za-z0-9 | head -c8)
   fi
   for i in $site_opts; do
-    if [ -z ${!i} ]
-    then
+    if [ -z ${!i} ]; then
       echo -n "Enter site ${i}: "
       read -e $i
       if [ -z ${!i} ] && [ $i != "domain" ]; then
@@ -628,8 +618,7 @@ new_site () {
     fi
   done
   site_exists $name
-  if [ $? -ne 0 ]
-  then
+  if [ $? -ne 0 ]; then
     build_fqdn
     if [ ! -z "$drush_make" ]; then
       if check_command drush; then
@@ -685,8 +674,7 @@ remove_site () {
   else
     sure="y"
   fi
-  if [ "${sure}" == "y" ] || [ "${sure}" == "Y" ]
-  then
+  if [ "${sure}" == "y" ] || [ "${sure}" == "Y" ]; then
     manage_database delete
     rm -Rf "$conf_dir/sites/${site}"
     rm -Rf "$docroot/sites/$fqdn"
@@ -699,8 +687,7 @@ remove_site () {
 
 # Set site/global options
 set_opts () {
-  if [ -z $site ]
-  then
+  if [ -z $site ]; then
     # Set global options
     setopts="$global_opts"
     passopts="$global_pass_opts"
@@ -747,8 +734,7 @@ set_opts () {
 }
 
 get_opts () {
-  if [ -z $site ]
-  then
+  if [ -z $site ]; then
     echo "Global config file: $conf_dir/damp.conf"
     cat "$conf_dir/damp.conf"
     if [ ! -z $show_pass ]; then
@@ -829,8 +815,7 @@ setup_stack () {
     old_conf_dir="$conf_dir"
     conf_dir="/etc/damp"
     conf_user="root"
-    if [ -d "$old_conf_dir" ] && [ $old_conf_dir != $conf_dir ]
-    then
+    if [ -d "$old_conf_dir" ] && [ $old_conf_dir != $conf_dir ]; then
       cp -R "$old_conf_dir" /etc
       if [ $? -ne 0 ]; then
         error_exit "error copying local configuration files to /etc/damp"
@@ -855,15 +840,13 @@ setup_stack () {
 
 # Configures database administration script
 configure_dbadmin () {
-  if [ -f "$dbadminconf" ]
-  then
+  if [ -f "$dbadminconf" ]; then
     grep "?>" "$dbadminconf" > /dev/null 2>&1
     if [ $? -eq 0 ]; then
       found_closing_tag=1
     fi
     grep "DAMP configuration - DO NOT REMOVE THIS LINE" "$dbadminconf" > /dev/null 2>&1
-    if [ $? -ne 0 ]
-    then
+    if [ $? -ne 0 ]; then
       [ ! -z $found_closing_tag ] && echo "<?php" >> "$dbadminconf"
       echo "/* DAMP configuration - DO NOT REMOVE THIS LINE */" >> "$dbadminconf"
       echo "\$cfg['Servers'][\$i]['auth_type'] = 'config';" >> "$dbadminconf"
@@ -924,8 +907,7 @@ EOM
           echo "###  DAMP script configuration complete - DO NOT REMOVE THIS LINE ###" >> "$httpdconfdir/phpmyadmin.conf"
         fi
         grep "DAMP configuration - DO NOT REMOVE THIS LINE" "$dbadminconf" > /dev/null 2>&1
-        if [ $? -ne 0 ]
-        then
+        if [ $? -ne 0 ]; then
           echo "/* DAMP configuration - DO NOT REMOVE THIS LINE */" >> "$dbadminconf"
           echo "\$cfg['Servers'][\$i]['auth_type'] = 'config';" >> "$dbadminconf"
           echo "\$cfg['Servers'][\$i]['user'] = '${rootdbuser}';" >> "$dbadminconf"
@@ -956,10 +938,8 @@ function uninstall_script () {
   else
     sure="y"
   fi
-  if [ "${sure}" == "y" ] || [ "${sure}" == "Y" ]
-  then
-    if [ ! -z $(list_sites) ]
-    then
+  if [ "${sure}" == "y" ] || [ "${sure}" == "Y" ]; then
+    if [ ! -z $(list_sites) ]; then
       while read line
       do
         site=$line
@@ -976,8 +956,7 @@ function uninstall_script () {
 
 # Edit service configuration files in the terminal
 edit_conf () {
-  if [ -z $1 ]
-  then
+  if [ -z $1 ]; then
     error_exit "no component specified"
   else
     case "$1" in
@@ -1004,8 +983,7 @@ fix_perm () {
   else
     site_list=$1
   fi
-  if [ ! -z "$site_list" ]
-  then
+  if [ ! -z "$site_list" ]; then
     while read line
     do
       load_site $line
@@ -1025,19 +1003,15 @@ fix_perm () {
 ########################################
 
 # What configuration directory are we using?
-if [ -z $SUDO_USER ]
-then
+if [ -z $SUDO_USER ]; then
   user_home="$HOME"
 else
   user_home="$(getent passwd $SUDO_USER | cut -d: -f6)"
 fi
-if [ -z $conf_dir ]
-then
-  if [ -f "$user_home/.local/share/damp/damp.conf" ]
-  then
+if [ -z $conf_dir ]; then
+  if [ -f "$user_home/.local/share/damp/damp.conf" ]; then
     conf_dir="$user_home/.local/share/damp"
-  elif [ -d "/etc/damp" ]
-  then
+  elif [ -d "/etc/damp" ]; then
     conf_dir="/etc/damp"
     conf_user="root"
   else
@@ -1052,8 +1026,7 @@ if [ ! -f "${conf_dir}/setup-run" ]; then
 fi
 
 # Check if we have any arguments at all
-if [ -z $1 ]
-then
+if [ -z $1 ]; then
   usage
   exit 1
 fi
@@ -1075,8 +1048,7 @@ fi
 ARGS=$(getopt -o hvn:d:miuasM:p:b:y -l help,version,name:,domain:,path:,docroot:,db:,database:,mail,install,uninstall,drush,dbadmin,skip,make:,phpconf:,httpdconf:,httpdvhost:,httpdport:,dbconf:,dbadminconf:,dbport:,dbuser:,dbpass:,initpath:,language:,yes,passwords -n "$progname" -- "$@");
 
 # Bad arguments
-if [ $? -ne 0 ];
-then
+if [ $? -ne 0 ]; then
   exit 1
 fi
 
@@ -1097,148 +1069,148 @@ while true; do
       exit 0
       ;;
     -n|--name)
-      shift;
+      shift
       if [ -n "$1" ]; then
         name="$1"
-        shift;
+        shift
       fi
       ;;
     -d|--domain)
-      shift;
+      shift
       if [ -n "$1" ]; then
         domain="$1"
-        shift;
+        shift
       fi
       ;;
     -p|--path|--docroot)
-      shift;
+      shift
       if [ -n "$1" ]; then
         docroot="$1"
-        shift;
+        shift
       fi
       ;;
     -b|--db|--database)
-      shift;
+      shift
       if [ -n "$1" ]; then
         database="$1"
-        shift;
+        shift
       fi
       ;;
     -m|--mail)
-      shift;
+      shift
       mail="mail"
       ;;
     -i|--install)
-      shift;
+      shift
       install="install"
       ;;
     --uninstall)
-      shift;
+      shift
       uninstall="remove"
       ;;
     -u|--drush)
-      shift;
+      shift
       drush="drush"
       ;;
     -a|--dbadmin)
-      shift;
+      shift
       dbadmin="dbadmin"
       ;;
     -s|--skip)
-      shift;
+      shift
       skip_selinux="skip"
       ;;
     -M|--make)
-      shift;
+      shift
       if [ -n "$1" ]; then
         drush_make="$1"
-        shift;
+        shift
       fi
       ;;
     -y|--yes)
-      shift;
+      shift
       yes_to_all=1
       ;;
     --passwords)
-      shift;
+      shift
       requires_root
       show_pass="show"
       ;;
     --phpconf)
-      shift;
+      shift
       if [ -n "$1" ]; then
         phpconf="$1"
-        shift;
+        shift
       fi
       ;;
     --httpdconf)
-      shift;
+      shift
       if [ -n "$1" ]; then
         httpdconf="$1"
-        shift;
+        shift
       fi
       ;;
     --httpdvhost)
-      shift;
+      shift
       if [ -n "$1" ]; then
         httpdvhost="$1"
-        shift;
+        shift
       fi
       ;;
     --httpdport)
-      shift;
+      shift
       if [ -n "$1" ]; then
         httpdport="$1"
-        shift;
+        shift
       fi
       ;;
     --dbconf)
-      shift;
+      shift
       if [ -n "$1" ]; then
         dbconf="$1"
-        shift;
+        shift
       fi
       ;;
     --dbadminconf)
-      shift;
+      shift
       if [ -n "$1" ]; then
         dbadminconf="$1"
-        shift;
+        shift
       fi
       ;;
     --dbport)
-      shift;
+      shift
       if [ -n "$1" ]; then
         dbport="$1"
-        shift;
+        shift
       fi
       ;;
     --dbuser)
-      shift;
+      shift
       if [ -n "$1" ]; then
         dbuser="$1"
-        shift;
+        shift
       fi
       ;;
     --dbpass)
-      shift;
+      shift
       if [ -n "$1" ]; then
         dbpass="$1"
-        shift;
+        shift
       fi
       ;;
     --initpath)
-      shift;
+      shift
       if [ -n "$1" ]; then
         initpath="$1"
-        shift;
+        shift
       fi
       ;;
     --language)
-      shift;
+      shift
       if [ -n "$1" ]; then
         lang="$1"
-        shift;
+        shift
       fi
       ;;
     --)
@@ -1262,8 +1234,7 @@ case "$operation" in
     new_site
     ;;
   open)
-    if [ -z $dbadmin ]
-    then
+    if [ -z $dbadmin ]; then
       requires_site
       open_site $site
     else
