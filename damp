@@ -299,8 +299,7 @@ build_fqdn () {
 
 # Load site options into global variables
 load_site () {
-  site_exists "$1"
-  if [ $? == 0 ]; then
+  if site_exists "$1"; then
     parse_conf "$conf_dir/sites/${1}/conf"
     if [ -r "$conf_dir/sites/${1}/pass" ]; then
       parse_conf "$conf_dir/sites/${1}/pass"
@@ -326,12 +325,10 @@ display_site () {
 
 # Generate a settings.php file for a Drupal site with correct database settings
 create_drupal_settings () {
-  as_user "cp -f \"$docroot/sites/default/default.settings.php\" \"$docroot/sites/$fqdn/settings.php\""
-  if [ $? -ne 0 ]; then
+  if ! as_user "cp -f \"$docroot/sites/default/default.settings.php\" \"$docroot/sites/$fqdn/settings.php\""; then
     error_exit "could not write drupal site settings file."
   fi
-  grep "db_url" "$docroot/sites/$fqdn/settings.php" > /dev/null 2>&1
-  if [ $? -ne 0 ]; then
+  if ! grep "db_url" "$docroot/sites/$fqdn/settings.php" > /dev/null 2>&1; then
     echo "
 \$databases['default']['default'] = array(
   'driver' => 'mysql',
@@ -399,8 +396,7 @@ add_search () {
   if [ -d "$1" ]; then
     i="$1"
     while [ "$i" != "/" ]; do
-      chmod a+x "$i"
-      if [ $? -ne 0 ]; then
+      if ! chmod a+x "$i"; then
         error_exit "could not change permissions on $i"
       fi
       i="$(dirname $i)"
@@ -497,8 +493,7 @@ alter_site () {
   # Alter site options - move files as necessary
   check_docroot
   if [ $name != $old_name ]; then
-    site_exists $name
-    if [ $? -eq 0 ]; then
+    if site_exists $name; then
       error_exit "site with that name already exists"
     fi
     check_vhost
@@ -582,8 +577,7 @@ site_info () {
 
 # Opens an arbitrary URL in a web browser
 open_url () {
-  as_user "xdg-open "$1" > /dev/null 2>&1"
-  if [ $? -ne 0 ]; then
+  if ! as_user "xdg-open "$1" > /dev/null 2>&1"; then
     error_exit "could not open browser. URL is $1"
   fi
 }
@@ -618,8 +612,7 @@ new_site () {
       database="$name"
     fi
   done
-  site_exists $name
-  if [ $? -ne 0 ]; then
+  if ! site_exists $name; then
     build_fqdn
     if [ ! -z "$drush_make" ]; then
       if check_command drush; then
@@ -657,7 +650,7 @@ new_site () {
     hosts_entry add "$fqdn"
     add_search "$docroot"
     if check_command chcon; then
-      chcon -R --type=httpd_sys_content_t "${docroot}"
+      chcon -R --type=httpd_sys_content_t "${docroot}" > /dev/null 2>&1
     fi
     damp_services restart
     open_site $name "/install.php"
@@ -709,8 +702,7 @@ set_opts () {
     passfile="$conf_dir/sites/${name}/pass"
   fi
   for i in $setopts; do
-    sed -i "s|${i}=.*|${i}=${!i}|" "$optfile"
-    if [ $? -ne 0 ]; then
+    if ! sed -i "s|${i}=.*|${i}=${!i}|" "$optfile"; then
       error_exit "error writing to the configuration file"
     fi
     if [ $i == "httpdport" ]; then
@@ -721,8 +713,7 @@ set_opts () {
     fi
   done
   for i in $passopts; do
-    sed -i "s|${i}=.*|${i}=${!i}|" "$passfile"
-    if [ $? -ne 0 ]; then
+    if ! sed -i "s|${i}=.*|${i}=${!i}|" "$passfile"; then
       error_exit "error writing to the password file"
     fi
     if [ $i == "rootdbpass" ]; then
@@ -795,21 +786,18 @@ setup_stack () {
 
   # Install the php uploadprogress module
   pecl install uploadprogress
-  grep "extension=uploadprogress.so" "$phpconf" > /dev/null 2>&1
-  if [ $? -ne 0 ]; then
+  if ! grep "extension=uploadprogress.so" "$phpconf" > /dev/null 2>&1; then
     echo "extension=uploadprogress.so" >> "$phpconf"
   fi
 
   # Prevent errors related to Apache server name
-  grep "ServerName localhost" "$httpdconf" > /dev/null 2>&1
-  if [ $? -ne 0 ]; then
+  if ! grep "ServerName localhost" "$httpdconf" > /dev/null 2>&1; then
     echo "ServerName localhost" >> "$httpdconf"
   fi
 
   # Install the script to system directories
   if [ ! -z $install ]; then
-    cp -f "$0" /usr/bin
-    if [ $? -ne 0 ]; then
+    if ! cp -f "$0" /usr/bin; then
       error_exit "could not copy script to /usr/bin"
     fi
     chmod 755 /usr/bin/damp
@@ -817,8 +805,7 @@ setup_stack () {
     conf_dir="/etc/damp"
     conf_user="root"
     if [ -d "$old_conf_dir" ] && [ $old_conf_dir != $conf_dir ]; then
-      cp -R "$old_conf_dir" /etc
-      if [ $? -ne 0 ]; then
+      if ! cp -R "$old_conf_dir" /etc; then
         error_exit "error copying local configuration files to /etc/damp"
       fi
       chmod -R 644 /etc/damp
@@ -839,31 +826,6 @@ setup_stack () {
   echo "$progname: remember to set the root MySQL password using: $progname set --dbpass mypass"
 }
 
-# Configures database administration script
-configure_dbadmin () {
-  if [ -f "$dbadminconf" ]; then
-    grep "?>" "$dbadminconf" > /dev/null 2>&1
-    if [ $? -eq 0 ]; then
-      found_closing_tag=1
-    fi
-    grep "DAMP configuration - DO NOT REMOVE THIS LINE" "$dbadminconf" > /dev/null 2>&1
-    if [ $? -ne 0 ]; then
-      [ ! -z $found_closing_tag ] && echo "<?php" >> "$dbadminconf"
-      echo "/* DAMP configuration - DO NOT REMOVE THIS LINE */" >> "$dbadminconf"
-      echo "\$cfg['Servers'][\$i]['auth_type'] = 'config';" >> "$dbadminconf"
-      echo "\$cfg['Servers'][\$i]['user'] = '${rootdbuser}';" >> "$dbadminconf"
-      echo "\$cfg['Servers'][\$i]['password'] = '${rootdbpass}';" >> "$dbadminconf"
-      echo "\$cfg['Servers'][\$i]['nopassword'] = TRUE;" >> "$dbadminconf"
-      echo "\$cfg['DefaultLang'] = 'en-utf-8';" >> "$dbadminconf"
-      echo "\$cfg['ServerDefault'] = 2;" >> "$dbadminconf"
-      [ ! -z $found_closing_tag ] && echo "?>" >> "$dbadminconf"
-    else
-      sed -i "s/['user'] = '.*'/['user'] = '${rootdbuser}'/g" "$dbadminconf"
-      sed -i "s/['password'] = '.*'/['passowrd'] = '${rootdbpass}'/g" "$dbadminconf"
-    fi
-  fi
-}
-
 # Installs the database management script
 setup_dbadmin () {
   if [ ! -f "${conf_dir}/setup-run" ]; then
@@ -882,8 +844,7 @@ gpgcheck=0
 EOM
       yum --enablerepo=epel -y install epel-release
       rm -f /etc/yum.repos.d/epel-bootstrap.repo
-      yum -y install phpmyadmin
-      if [ $? -ne 0 ]; then
+      if ! yum -y install phpmyadmin; then
         error_exit "could not install database administration packages"
       fi
       sed -i "s/\['auth_type'\] *= *'.*'/\['auth_type'\] = 'config'/g" "$dbadminconf"
@@ -894,8 +855,7 @@ EOM
       sed -i '/DAMPDELETEME/,+1d' "$dbadminconf"
       ;;
     Ubuntu|Debian)
-      apt-get -y install phpmyadmin
-      if [ $? -ne 0 ]; then
+      if ! apt-get -y install phpmyadmin; then
         error_exit "could not install database administration packages"
       fi
       if [ -f "$httpdconfdir/phpmyadmin.conf" ]; then
@@ -992,7 +952,7 @@ fix_perm () {
       find "${docroot}/sites/${fqdn}/files" -type d -print0 | xargs -0 chmod o+rwx >/dev/null 2>&1
       find "${docroot}/sites/${fqdn}/files" -type f -print0 | xargs -0 chmod o+rw >/dev/null 2>&1
       if check_command chcon; then
-        chcon -R --type=httpd_sys_content_t "${docroot}"
+        chcon -R --type=httpd_sys_content_t "${docroot}" > /dev/null 2>&1
       fi
     done <<< "$site_list"
   fi
