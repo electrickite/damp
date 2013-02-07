@@ -151,26 +151,28 @@ show_version () {
   detect_os
   case "$os" in
     Ubuntu|Debian)
-      apache_ver="apachectl"
+      apache_ver="apache2ctl"
       ;;
     *|"Red Hat"|CentOS)
       apache_ver="httpd"
       ;;
   esac
-  if check_command $apache_ver; then
-    eval "$apache_ver -v"
-  else
-    echo "apache not found"
-  fi
-  echo ""
-  for i in mysql php; do
-    if check_command $i; then
-      eval "$i --version"
+  if [ $(id -u) -eq 0 ]; then
+    if check_command $apache_ver; then
+      eval "$apache_ver -v"
     else
-      echo "$i not found"
+      echo "apache not found"
     fi
     echo ""
-  done
+    for i in mysql php; do
+      if check_command $i; then
+        eval "$i --version"
+      else
+        echo "$i not found"
+      fi
+      echo ""
+    done
+  fi
   echo "DAMP script version $prog_version"
   echo "DAMP is under heavy development - expect frequent changes"
 }
@@ -262,8 +264,7 @@ detect_os () {
   distributions="Red CentOS Ubuntu Debian"
   os=""
   for i in $distributions; do
-    cat /etc/*release | grep $i > /dev/null 2>&1
-    if [ $? == 0 ]; then
+    if cat /etc/*release | grep $i > /dev/null 2>&1; then
       os=$i
     fi
   done
