@@ -103,40 +103,81 @@ database, etc.. Info expects a site name, otherwise it will print a list of
 sites. Use the --passwords option to display site passwords as well.
 
 #### new
-Creates a new Drupal site. 
+Creates a new Drupal site. Required options are:
+
+  * name: The site's unique short name.
+  * docroot: The full path to the Drupal directory for the site.
+
+Optional options include:
+
+  * domain: When combined with the site name, this will provide the full domain
+    name of the site for use in URLs. (name.domain)
+  * database: The database name to use for this site. Defaults to the site name.
+  * make: Full path to a drush make file used to build the Drupal code base,
+    which will be placed at the path specified in the docroot option. Drush must
+    be installed and available in the PATH to use this option.
+
+When it has all required options, DAMP will create a directory at
+docroot/sites/name.domain conatining the Drupal settings file. It will also
+create a database, Apache vhost configuration, and /etc/hosts entry. Once
+complete, the script will attempt to open the Drupal installer in your default
+web browser.
+
+Once the Drupal installation in complete, you may want to consider running
+`damp fixperms mynewsite` to correct post-install directory permissions.
 
 #### open
-open a site in a web browser
+Opens the specified site in your default web browser. If used with the --install
+option, DAMP will open the site's install.php script. If used with the --dbadmin
+option and the database administration package has been set up, DAMP will open
+the database administration tool.
 
 #### remove
-delete a site
+Deletes a site from the system. This will remove the database, hosts entry
+Apache configuration files, DAMP configuration directory, and the site
+subdirectory from the Drupal document root.
 
 #### set
-set site/global options
+Set site or global configuration options. Any options passed in on the command
+line will be applied to the site if specified, or the global script
+configuration if the site is omitted. DAMP will also alter the site's components
+to match the new options. For example: if the site name is changed, directory
+names will be altered, configuration files updated, etc.
 
 #### get
-show site/global cofiguration files
+Show a list of site/global cofiguration options. Use the --passwords option to
+display passwords as well.
 
 #### start
-start services
+Start Apache and MySQL
 
 #### stop
-stop services
+Stop Apache and MySQL
 
 #### restart
-restart services
+Restart Apace and MySQL.
 
 #### status
-show status of services
+Show the current status Apache and MySQL
 
 #### setup
-install and configure DAMP stack
+Installs and configures the DAMP stack. With no options, setup will install any
+necessary packages, configure SELinux if present, and writes out various conf
+files. Options include:
+
+  * install: Copies the script to /usr/bin/damp, making it available in the PATH
+    and moves global configuration to /etc/damp.
+  * drush: Installs the Drupal shell.
+  * dbadmin: Installs phpMyAdmin for web-based database administration.
+  * skip: Skips SELinux configuration; this operation can take a long time.
 
 #### configure
 edit configuration files
 
 #### fixperms
-fix site directory permissions
+Attempts to fix site directory permission issues. In general, it will make files
+readable to all, set SELinux contexts and enable search permissions on all
+directories in the document root's tree.
 
 ### Options ###
 
