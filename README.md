@@ -3,10 +3,10 @@ DAMP
 
 DAMP is a bash script intended to simplify local [Drupal][1] development using
 the Drupal/Apache/MySQL/PHP (DAMP) stack. The goal of the project is to provide
-an easy-to-use interface for installing a local web stack and manage Drupal
-sites on top it. [Acquia Dev Desktop][2] already provides this type of
-environment for Mac and Windows users, but I could not find a similar utility
-for GNU/Linux.
+an easy-to-use interface for installing a local web stack and for managing
+Drupal sites on top it. [Acquia Dev Desktop][2] already provides this type of
+environment for Mac and Windows users; DAMP is aims to bring this functionality
+to Linux users as well.
 
 As a bash script, damp has no graphical interface: all operations are performed
 in the terminal. This can be a real advantage if you need to perform a number of
@@ -20,17 +20,17 @@ on other/older distros. Patches to improve portability are welcome!
 Notes
 -----
 
-  * DAMP is intended for use in local development only: you should not use this
-    script in a production environment. It is _not_ designed with security or
-    prformance in mind. Permissions are deliberately relaxed, passwords may be
-    stored in the clear, etc. Use at your own risk
+  * DAMP is intended for use in *local development only*: you should not use
+    this script in a production environment. It is _not_ designed with security
+    or performance in mind. Permissions are deliberately relaxed, passwords may
+    be stored in the clear, etc. Use at your own risk.
   * DAMP uses real web hosting software, so you should treat your system like a
     web server while using DAMP. This means operating a host-based firewall is
     strongly advised.
   * While the script attempts to correct some common permissions and security
     issues, you may ultimately have to adjust the permissions on your Drupal
-    durectories to ensure that Apache can access them. Please see your
-    distribution's documentation to help solve these issues.
+    directories to ensure that Apache can access them. Please see your
+    distribution's documentation to help solve permission issues.
   * The script attempts to configure SELinux settings and apply appropriate
     contexts to document roots, but if strange permissions errors persist,
     consider disabling SELinux (`sudo setenforce permissive`) while you
@@ -49,7 +49,7 @@ Installation is simple:
 Other common setup options are:
 
   * `sudo ./damp setup --install`
-    Installs all packages then places the damp script in /usr/bin and
+    Installs all packages then places the damp script in /usr/bin and the
     configuration files in /etc/damp.
   * `sudo ./damp setup -ium`
     Performs all actions in the list above plus installs a mail transport agent
@@ -61,7 +61,7 @@ Configuration
 DAMP stores its configuration either in $HOME/.local/share/damp or in /etc/damp
 if it has been installed. The configuration directory structure is as follows:
 
-    /etc/damp
+    /etc/damp - (or $HOME/.local/share/damp)
       -> damp.conf - global script configuration
       -> damp.pass - global passwords (ie. database root)
       -> sites
@@ -82,10 +82,10 @@ to customize them if you have a non-standard setup.
 Usage
 -----
 
-DAMP is primarily intended for configuring a web devlopment software stack and
-then creating/managing Drupal sites. The script contains a number of commands
-related to those tasks such as creating new sites, removing sites, and setting
-global options.
+DAMP is primarily intended for configuring a web devlopment environment and then
+creating/managing Drupal sites. The script contains a number of commands related
+to those tasks such as creating new sites, removing sites, and setting global
+options.
 
 The general syntax of a DAMP command is: `damp COMMAND [OPTION]... [SITE]`
 
@@ -108,22 +108,22 @@ Creates a new Drupal site. Required options are:
   * name: The site's unique short name.
   * docroot: The full path to the Drupal directory for the site.
 
-Optional options include:
+Optional parameters include:
 
   * domain: When combined with the site name, this will provide the full domain
     name of the site for use in URLs. (name.domain)
   * database: The database name to use for this site. Defaults to the site name.
   * make: Full path to a drush make file used to build the Drupal code base,
     which will be placed at the path specified in the docroot option. Drush must
-    be installed and available in the PATH to use this option.
+    be installed and available in the PATH.
 
-When it has all required options, DAMP will create a directory at
+When it has received all required options, DAMP will create a directory at
 docroot/sites/name.domain conatining the Drupal settings file. It will also
 create a database, Apache vhost configuration, and /etc/hosts entry. Once
 complete, the script will attempt to open the Drupal installer in your default
 web browser.
 
-Once the Drupal installation in complete, you may want to consider running
+Once the Drupal installation finishes, you may want to consider running
 `damp fixperms mynewsite` to correct post-install directory permissions.
 
 #### open
@@ -135,7 +135,8 @@ the database administration tool.
 #### remove
 Deletes a site from the system. This will remove the database, hosts entry
 Apache configuration files, DAMP configuration directory, and the site
-subdirectory from the Drupal document root.
+subdirectory from the Drupal document root. Can also be invoked with delete, rm,
+and del.
 
 #### set
 Set site or global configuration options. Any options passed in on the command
@@ -162,56 +163,68 @@ Show the current status Apache and MySQL
 
 #### setup
 Installs and configures the DAMP stack. With no options, setup will install any
-necessary packages, configure SELinux if present, and writes out various conf
+necessary packages, configure SELinux if present, and write out various conf
 files. Options include:
 
   * install: Copies the script to /usr/bin/damp, making it available in the PATH
     and moves global configuration to /etc/damp.
+  * mail: Install the Postfix mail transport agent. Do not use if your system
+    already has an MTA.
   * drush: Installs the Drupal shell.
-  * dbadmin: Installs phpMyAdmin for web-based database administration.
+  * dbadmin: Installs phpMyAdmin for web-based database administration. This
+    option cannot be used with any other options.
   * skip: Skips SELinux configuration; this operation can take a long time.
 
+Depending on your distribution, you may be prompted for a MySQL root username
+and/or password. After setup has completed, use `damp set --dbpass mypass` and
+`damp set --dbuser myuser` to store these values in your DAMP configuration.
+
 #### configure
-edit configuration files
+Opens the Apache, MySQL, and PHP configuration files in a terminal text editor.
+(vi) Use one of the following commands:
+
+    damp configure httpd
+    damp configure mysql
+    damp configure php
 
 #### fixperms
 Attempts to fix site directory permission issues. In general, it will make files
 readable to all, set SELinux contexts and enable search permissions on all
-directories in the document root's tree.
+directories in the document root's tree. Can also be invoked using fix.
 
-### Options ###
+### Option List ###
 
-  -a, --dbadmin            install or open web-based database administration
-                           front end
-  -b, --database, --db     database name, defaults to site name
-  -d, --domain             domain name (ie. example.com)
-  -n, --name               site shortname (must be unique)
-  -p, --docroot, --path    full path to the Drupal installation
-  -M, --make               path to dush make file, will be built at docroot
-
-  --dbuser                 database user name, either site user or root account
-  --dbpass                 the database user password
+    -a, --dbadmin            install or open web-based database administration
+                             front end
+    -b, --database, --db     database name, defaults to site name
+    -d, --domain             domain name (ie. example.com)
+    -n, --name               site shortname (must be unique)
+    -p, --docroot, --path    full path to the Drupal installation
+    -M, --make               path to dush make file, will be built at docroot
+    
+    --dbuser                 database user name, either site user or root
+    --dbpass                 the database user password
               
-  --dbconf                 mysql configuration file path
-  --dbport                 mysql port number
-  --httpdconf              apache configuration file path
-  --httpdport              apache port number
-  --httpdvhost             apache vhost configuration file directory
-  --initpath               path to service init scripts
-  --phpconf                php configuration file path
-
-  -h, --help               display this help and exit
-  -i, --install            install script to path or open site install page
-                           used with setup or open
-  --language               language to use during site installs
-  -m, --mail               install system MTA, only used during setup
-  --passwords              force display passwords in option lists
-  -s, --skip               skip SELinux configuration during setup
-  -u, --drush              install drush (the DRUpal SHell)
-  --uninstall              uninstall script, configuration, and sites
-                           used wuth setup
-  -v, --version            output version information and exit
-  -y, --yes                answer yes to all prompts
+    --dbconf                 mysql configuration file path
+    --dbport                 mysql port number
+    --httpdconf              apache configuration file path
+    --httpdport              apache port number
+    --httpdvhost             apache vhost configuration file directory
+    --initpath               path to service init scripts
+    --phpconf                php configuration file path
+    
+    -h, --help               display this help and exit
+    -i, --install            install script to path or open site install page
+                             used with setup or open
+    --language               language to use during site installs
+    -m, --mail               install system MTA, only used during setup
+    --passwords              force display passwords in option lists
+    -s, --skip               skip SELinux configuration during setup
+    -u, --drush              install drush (the DRUpal SHell)
+    --uninstall              uninstall script, configuration, and sites
+                             used wuth setup
+    -v, --version            output version information and exit
+    -y, --yes                answer yes to all prompts
 
 Examples
 --------
@@ -221,7 +234,24 @@ Examples
     damp set --domain example.com mysite
     damp new --name mysite -d example.com
     damp rm -y mysite
-    damp configure php 
+    damp configure php
+
+
+LICENSE AND DISCLAIMER
+----------------------
+
+This program is free software; you can redistribute it and/or modify it under 
+the terms of the GNU General Public License as published by the Free Software 
+Foundation; either version 2 of the License, or (at your option) any later 
+version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY 
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A 
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with 
+this program; if not, write to the Free Software Foundation, Inc., 51 Franklin 
+Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 
 [1]: http://drupal.org/ "Drupal"
