@@ -31,7 +31,7 @@
 #conf_dir="$HOME/.local/share/damp"
 
 progname="damp"
-prog_version="0.2.0"
+prog_version="0.3.0"
 global_opts="phpconf httpdconf httpdconfdir httpdvhost httpdport dbconf rootdbuser dbport initpath lang dbadminconf"
 global_pass_opts="rootdbpass"
 site_opts="name domain docroot database dbuser"
